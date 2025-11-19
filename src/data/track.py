@@ -1,8 +1,10 @@
 """
 Track data structure representing a field-work track (parallel swath).
 """
-from typing import Tuple, Optional
+
 from dataclasses import dataclass
+from typing import Optional, Tuple
+
 import numpy as np
 
 
@@ -33,10 +35,7 @@ class Track:
     @property
     def midpoint(self) -> Tuple[float, float]:
         """Calculate track midpoint."""
-        return (
-            (self.start[0] + self.end[0]) / 2,
-            (self.start[1] + self.end[1]) / 2
-        )
+        return ((self.start[0] + self.end[0]) / 2, (self.start[1] + self.end[1]) / 2)
 
     @property
     def direction_vector(self) -> Tuple[float, float]:
@@ -48,14 +47,9 @@ class Track:
             return (0, 0)
         return (dx / length, dy / length)
 
-    def reverse(self) -> 'Track':
+    def reverse(self) -> "Track":
         """Return a reversed copy of this track."""
-        return Track(
-            start=self.end,
-            end=self.start,
-            index=self.index,
-            block_id=self.block_id
-        )
+        return Track(start=self.end, end=self.start, index=self.index, block_id=self.block_id)
 
     def __repr__(self) -> str:
         block_str = f", block={self.block_id}" if self.block_id is not None else ""

@@ -1,9 +1,11 @@
 """
 Obstacle data structure and classification types.
 """
-from enum import Enum
-from typing import List, Tuple, Optional
+
 from dataclasses import dataclass
+from enum import Enum
+from typing import List, Optional, Tuple
+
 from shapely.geometry import Polygon
 
 
@@ -23,6 +25,7 @@ class ObstacleType(Enum):
     Type D: Standard obstacle requiring field decomposition
             (all remaining obstacles + merged Type C)
     """
+
     A = "Type A - Ignorable"
     B = "Type B - Boundary-touching"
     C = "Type C - Close proximity"
@@ -72,4 +75,7 @@ class Obstacle:
 
     def __repr__(self) -> str:
         merged_str = f", merged from {self.merged_from}" if self.is_merged() else ""
-        return f"Obstacle({self.index}, {self.obstacle_type.name}, area={self.area:.2f}m²{merged_str})"
+        return (
+            f"Obstacle({self.index}, {self.obstacle_type.name}, "
+            f"area={self.area:.2f}m²{merged_str})"
+        )

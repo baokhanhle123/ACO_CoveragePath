@@ -3,9 +3,11 @@ Headland generation for field and obstacles.
 
 Implements Stage 1 headland generation from Zhou et al. 2014.
 """
-from typing import List, Tuple, Optional
-from shapely.geometry import Polygon
+
 from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
+from shapely.geometry import Polygon
 
 from .polygon import offset_polygon
 
@@ -27,9 +29,7 @@ class HeadlandResult:
 
 
 def generate_field_headland(
-    field_boundary: Polygon,
-    operating_width: float,
-    num_passes: int
+    field_boundary: Polygon, operating_width: float, num_passes: int
 ) -> Optional[HeadlandResult]:
     """
     Generate headland area for the main field.
@@ -49,11 +49,7 @@ def generate_field_headland(
     """
     if num_passes == 0:
         # No headland, inner boundary is same as field boundary
-        return HeadlandResult(
-            passes=[],
-            inner_boundary=field_boundary,
-            total_width=0.0
-        )
+        return HeadlandResult(passes=[], inner_boundary=field_boundary, total_width=0.0)
 
     w = operating_width
     passes = []
@@ -88,19 +84,13 @@ def generate_field_headland(
         # Use last pass as inner boundary
         inner_boundary = current_boundary
 
-    total_width = (num_passes * w)
+    total_width = num_passes * w
 
-    return HeadlandResult(
-        passes=passes,
-        inner_boundary=inner_boundary,
-        total_width=total_width
-    )
+    return HeadlandResult(passes=passes, inner_boundary=inner_boundary, total_width=total_width)
 
 
 def generate_obstacle_headland(
-    obstacle_boundary: Polygon,
-    operating_width: float,
-    num_passes: int
+    obstacle_boundary: Polygon, operating_width: float, num_passes: int
 ) -> Optional[HeadlandResult]:
     """
     Generate headland area around an obstacle.
@@ -117,9 +107,7 @@ def generate_obstacle_headland(
     """
     if num_passes == 0:
         return HeadlandResult(
-            passes=[],
-            inner_boundary=obstacle_boundary,  # No expansion
-            total_width=0.0
+            passes=[], inner_boundary=obstacle_boundary, total_width=0.0  # No expansion
         )
 
     w = operating_width
@@ -159,11 +147,13 @@ def generate_obstacle_headland(
     return HeadlandResult(
         passes=passes,
         inner_boundary=outer_boundary,  # For obstacles, "inner" is actually outer
-        total_width=total_width
+        total_width=total_width,
     )
 
 
-def get_headland_path_coordinates(headland_result: HeadlandResult) -> List[List[Tuple[float, float]]]:
+def get_headland_path_coordinates(
+    headland_result: HeadlandResult,
+) -> List[List[Tuple[float, float]]]:
     """
     Extract coordinates of all headland passes for visualization/export.
 

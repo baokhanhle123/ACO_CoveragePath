@@ -3,19 +3,18 @@ Field-work track generation for complete coverage.
 
 Implements parallel track generation from Zhou et al. 2014 (Section 2.2.3).
 """
+
 from typing import List, Tuple
+
 import numpy as np
-from shapely.geometry import Polygon, LineString, Point
-from shapely import affinity
+from shapely.geometry import LineString, Point, Polygon
 
 from ..data.track import Track
 from .mbr import get_mbr_with_orientation
 
 
 def generate_parallel_tracks(
-    inner_boundary: Polygon,
-    driving_direction_degrees: float,
-    operating_width: float
+    inner_boundary: Polygon, driving_direction_degrees: float, operating_width: float
 ) -> List[Track]:
     """
     Generate parallel field-work tracks to cover the field body.
@@ -71,8 +70,7 @@ def generate_parallel_tracks(
     # Find field bounds to create long enough lines
     field_bounds = inner_boundary.bounds  # (minx, miny, maxx, maxy)
     field_diagonal = np.sqrt(
-        (field_bounds[2] - field_bounds[0])**2 +
-        (field_bounds[3] - field_bounds[1])**2
+        (field_bounds[2] - field_bounds[0]) ** 2 + (field_bounds[3] - field_bounds[1]) ** 2
     )
 
     # Make lines longer than field diagonal to ensure coverage
@@ -107,7 +105,7 @@ def generate_parallel_tracks(
                 start=seg_start,
                 end=seg_end,
                 index=track_index,
-                block_id=None  # Will be assigned during clustering
+                block_id=None,  # Will be assigned during clustering
             )
             tracks.append(track)
             track_index += 1

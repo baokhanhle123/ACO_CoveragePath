@@ -1,10 +1,11 @@
 """
 Block data structure representing a sub-field after decomposition.
 """
-from typing import List, Tuple, Optional
+
 from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
+
 from shapely.geometry import Polygon
-import numpy as np
 
 from .track import Track
 
@@ -124,8 +125,10 @@ class Block:
         return None
 
     def __repr__(self) -> str:
-        return (f"Block({self.block_id}, tracks={self.num_tracks}, "
-                f"area={self.area:.2f}m², parity={self.parity_function})")
+        return (
+            f"Block({self.block_id}, tracks={self.num_tracks}, "
+            f"area={self.area:.2f}m², parity={self.parity_function})"
+        )
 
 
 @dataclass
@@ -171,4 +174,5 @@ class BlockGraph:
         return None
 
     def __repr__(self) -> str:
-        return f"BlockGraph(blocks={len(self.blocks)}, edges={sum(len(adj) for adj in self.adjacency.values()) // 2})"
+        edge_count = sum(len(adj) for adj in self.adjacency.values()) // 2
+        return f"BlockGraph(blocks={len(self.blocks)}, edges={edge_count})"

@@ -2,10 +2,15 @@
 Data structures for coverage path planning.
 """
 
-from .field import Field, FieldParameters, create_rectangular_field, create_field_with_rectangular_obstacles
+from .block import Block, BlockGraph, BlockNode
+from .field import (
+    Field,
+    FieldParameters,
+    create_field_with_rectangular_obstacles,
+    create_rectangular_field,
+)
 from .obstacle import Obstacle, ObstacleType
 from .track import Track
-from .block import Block, BlockNode, BlockGraph
 
 __all__ = [
     "Field",

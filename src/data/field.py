@@ -1,10 +1,11 @@
 """
 Field data structure representing an agricultural field with obstacles.
 """
-from typing import List, Optional, Tuple
-import numpy as np
-from shapely.geometry import Polygon, Point
+
 from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
+
+from shapely.geometry import Point, Polygon
 
 
 @dataclass
@@ -102,15 +103,14 @@ class Field:
 
     def __repr__(self) -> str:
         name_str = f"'{self.name}'" if self.name else "Unnamed"
-        return (f"Field({name_str}, area={self.area:.2f}m², "
-                f"obstacles={len(self.obstacles)})")
+        return f"Field({name_str}, area={self.area:.2f}m², " f"obstacles={len(self.obstacles)})"
 
 
 def create_rectangular_field(
     width: float,
     height: float,
     obstacles: Optional[List[List[Tuple[float, float]]]] = None,
-    name: Optional[str] = None
+    name: Optional[str] = None,
 ) -> Field:
     """
     Create a simple rectangular field.
@@ -124,12 +124,7 @@ def create_rectangular_field(
     Returns:
         Field object
     """
-    boundary = [
-        (0, 0),
-        (width, 0),
-        (width, height),
-        (0, height)
-    ]
+    boundary = [(0, 0), (width, 0), (width, height), (0, height)]
     return Field(boundary=boundary, obstacles=obstacles or [], name=name)
 
 
@@ -137,7 +132,7 @@ def create_field_with_rectangular_obstacles(
     field_width: float,
     field_height: float,
     obstacle_specs: List[Tuple[float, float, float, float]],
-    name: Optional[str] = None
+    name: Optional[str] = None,
 ) -> Field:
     """
     Create field with rectangular obstacles.
@@ -153,12 +148,7 @@ def create_field_with_rectangular_obstacles(
     """
     obstacles = []
     for x, y, w, h in obstacle_specs:
-        obstacle = [
-            (x, y),
-            (x + w, y),
-            (x + w, y + h),
-            (x, y + h)
-        ]
+        obstacle = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
         obstacles.append(obstacle)
 
     return create_rectangular_field(field_width, field_height, obstacles, name)

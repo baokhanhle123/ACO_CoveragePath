@@ -7,19 +7,19 @@ Implements obstacle categorization from Zhou et al. 2014 (Section 2.2.2):
 - Type C: Obstacles in close proximity (distance < operating width)
 - Type D: Standard obstacles requiring decomposition (remaining + merged Type C)
 """
-from typing import List, Tuple, Optional, Set
+
+from typing import List, Set, Tuple
+
 import numpy as np
-from shapely.geometry import Polygon
 from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon
 
 from ..data.obstacle import Obstacle, ObstacleType
 from ..geometry.polygon import minimum_distance_between_polygons, polygon_union
 
 
 def classify_obstacle_type_a(
-    obstacle_polygon: Polygon,
-    driving_direction_degrees: float,
-    threshold: float
+    obstacle_polygon: Polygon, driving_direction_degrees: float, threshold: float
 ) -> bool:
     """
     Classify if obstacle is Type A (ignorable due to small size).
@@ -48,21 +48,14 @@ def classify_obstacle_type_a(
     cos_angle = np.cos(angle_rad)
     sin_angle = np.sin(angle_rad)
 
-    rotation_matrix = np.array([
-        [cos_angle, -sin_angle],
-        [sin_angle, cos_angle]
-    ])
+    rotation_matrix = np.array([[cos_angle, -sin_angle], [sin_angle, cos_angle]])
 
     rotated_coords = coords @ rotation_matrix.T
 
     # Get bounding box in rotated coordinates
-    min_x = np.min(rotated_coords[:, 0])
-    max_x = np.max(rotated_coords[:, 0])
+    # We only need perpendicular dimension for Type A classification
     min_y = np.min(rotated_coords[:, 1])
     max_y = np.max(rotated_coords[:, 1])
-
-    # Dimension parallel to driving direction
-    d_parallel = max_x - min_x
 
     # Dimension perpendicular to driving direction (D_d)
     d_perpendicular = max_y - min_y
@@ -71,12 +64,15 @@ def classify_obstacle_type_a(
     return d_perpendicular < threshold
 
 
-def classify_obstacle_type_b(
-    obstacle_polygon: Polygon,
-    field_inner_boundary: Polygon
-) -> bool:
+def classify_obstacle_type_b(obstacle_polygon: Polygon, field_inner_boundary: Polygon) -> bool:
     """
     Classify if obstacle is Type B (intersecting with field inner boundary).
+
+    According to paper: "This type includes obstacles where their boundary
+    intersects with the inner boundary of the field."
+
+    This means the obstacle's exterior ring should cross or touch the field's
+    inner boundary line, NOT that the obstacle is simply inside the field.
 
     Args:
         obstacle_polygon: Obstacle polygon
@@ -85,14 +81,17 @@ def classify_obstacle_type_b(
     Returns:
         True if Type B, False otherwise
     """
-    # Check if obstacle boundary intersects with field inner boundary
-    return obstacle_polygon.intersects(field_inner_boundary)
+    # Get boundary lines (exterior rings)
+    obstacle_boundary_line = obstacle_polygon.exterior
+    field_boundary_line = field_inner_boundary.exterior
+
+    # Check if the obstacle's boundary line intersects the field's boundary line
+    # This correctly identifies obstacles that touch or cross the field boundary
+    # while excluding obstacles completely inside or outside the field
+    return obstacle_boundary_line.intersects(field_boundary_line)
 
 
-def find_type_c_clusters(
-    obstacles: List[Polygon],
-    operating_width: float
-) -> List[List[int]]:
+def find_type_c_clusters(obstacles: List[Polygon], operating_width: float) -> List[List[int]]:
     """
     Find clusters of obstacles in close proximity (Type C).
 
@@ -179,7 +178,7 @@ def merge_obstacles(obstacle_polygons: List[Polygon]) -> Polygon:
     except Exception:
         # Fallback: use union
         merged_polygon = polygon_union(obstacle_polygons)
-        if hasattr(merged_polygon, 'convex_hull'):
+        if hasattr(merged_polygon, "convex_hull"):
             merged_polygon = merged_polygon.convex_hull
 
     return merged_polygon
@@ -190,7 +189,7 @@ def classify_all_obstacles(
     field_inner_boundary: Polygon,
     driving_direction_degrees: float,
     operating_width: float,
-    threshold: float
+    threshold: float,
 ) -> List[Obstacle]:
     """
     Classify all obstacles into types A, B, C, D.
@@ -234,11 +233,7 @@ def classify_all_obstacles(
 
         if is_type_b:
             # Type B obstacle
-            obs = Obstacle(
-                boundary=obstacle_boundaries[i],
-                obstacle_type=ObstacleType.B,
-                index=i
-            )
+            obs = Obstacle(boundary=obstacle_boundaries[i], obstacle_type=ObstacleType.B, index=i)
             classified_obstacles.append(obs)
         else:
             # Candidate for Type C or D
@@ -267,18 +262,14 @@ def classify_all_obstacles(
             boundary=merged_boundary,
             obstacle_type=ObstacleType.D,
             index=min(original_indices),  # Use smallest original index
-            merged_from=original_indices
+            merged_from=original_indices,
         )
         classified_obstacles.append(obs)
 
     # Step 4: Remaining Type D candidates (not in Type C clusters)
     for i in type_d_candidates:
         if i not in type_c_indices:
-            obs = Obstacle(
-                boundary=obstacle_boundaries[i],
-                obstacle_type=ObstacleType.D,
-                index=i
-            )
+            obs = Obstacle(boundary=obstacle_boundaries[i], obstacle_type=ObstacleType.D, index=i)
             classified_obstacles.append(obs)
 
     return classified_obstacles
@@ -313,7 +304,7 @@ def get_obstacle_statistics(obstacles: List[Obstacle]) -> dict:
         "Type C": 0,
         "Type D": 0,
         "Merged": 0,
-        "Total": len(obstacles)
+        "Total": len(obstacles),
     }
 
     for obs in obstacles:

@@ -4,10 +4,12 @@ Minimum Bounding Rectangle (MBR) calculation using rotating calipers.
 Implements minimum-perimeter bounding rectangle as used in Zhou et al. 2014
 for track generation.
 """
-from typing import Tuple, List
+
+from typing import Tuple
+
 import numpy as np
-from shapely.geometry import Polygon, LineString
 from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon
 
 
 def compute_minimum_bounding_rectangle(polygon: Polygon) -> Tuple[np.ndarray, float]:
@@ -36,7 +38,7 @@ def compute_minimum_bounding_rectangle(polygon: Polygon) -> Tuple[np.ndarray, fl
         hull_points = coords
 
     # Rotating calipers algorithm
-    min_perimeter = float('inf')
+    min_perimeter = float("inf")
     best_rectangle = None
     best_angle = 0.0
 
@@ -55,10 +57,7 @@ def compute_minimum_bounding_rectangle(polygon: Polygon) -> Tuple[np.ndarray, fl
         cos_angle = np.cos(rotation_angle)
         sin_angle = np.sin(rotation_angle)
 
-        rotation_matrix = np.array([
-            [cos_angle, -sin_angle],
-            [sin_angle, cos_angle]
-        ])
+        rotation_matrix = np.array([[cos_angle, -sin_angle], [sin_angle, cos_angle]])
 
         rotated_points = hull_points @ rotation_matrix.T
 
@@ -77,18 +76,12 @@ def compute_minimum_bounding_rectangle(polygon: Polygon) -> Tuple[np.ndarray, fl
             min_perimeter = perimeter
 
             # Create rectangle corners in rotated coordinates
-            rect_rotated = np.array([
-                [min_x, min_y],
-                [max_x, min_y],
-                [max_x, max_y],
-                [min_x, max_y]
-            ])
+            rect_rotated = np.array(
+                [[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]]
+            )
 
             # Rotate back to original coordinates
-            inverse_rotation = np.array([
-                [cos_angle, sin_angle],
-                [-sin_angle, cos_angle]
-            ])
+            inverse_rotation = np.array([[cos_angle, sin_angle], [-sin_angle, cos_angle]])
 
             best_rectangle = rect_rotated @ inverse_rotation.T
             best_angle = np.degrees(edge_angle)
@@ -117,10 +110,7 @@ def get_mbr_with_orientation(polygon: Polygon, preferred_angle_degrees: float) -
     cos_angle = np.cos(-angle_rad)
     sin_angle = np.sin(-angle_rad)
 
-    rotation_matrix = np.array([
-        [cos_angle, -sin_angle],
-        [sin_angle, cos_angle]
-    ])
+    rotation_matrix = np.array([[cos_angle, -sin_angle], [sin_angle, cos_angle]])
 
     rotated_coords = coords @ rotation_matrix.T
 
@@ -131,18 +121,10 @@ def get_mbr_with_orientation(polygon: Polygon, preferred_angle_degrees: float) -
     max_y = np.max(rotated_coords[:, 1])
 
     # Create rectangle in rotated coordinates
-    rect_rotated = np.array([
-        [min_x, min_y],
-        [max_x, min_y],
-        [max_x, max_y],
-        [min_x, max_y]
-    ])
+    rect_rotated = np.array([[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]])
 
     # Rotate back
-    inverse_rotation = np.array([
-        [cos_angle, sin_angle],
-        [-sin_angle, cos_angle]
-    ])
+    inverse_rotation = np.array([[cos_angle, sin_angle], [-sin_angle, cos_angle]])
 
     rectangle = rect_rotated @ inverse_rotation.T
 

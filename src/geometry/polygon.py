@@ -1,17 +1,17 @@
 """
 Polygon geometric operations using Shapely and pyclipper.
 """
-from typing import List, Tuple, Union, Optional
+
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
-from shapely.geometry import Polygon, MultiPolygon, LineString, Point
-from shapely import affinity
 import pyclipper
+from shapely import affinity
+from shapely.geometry import MultiPolygon, Point, Polygon
 
 
 def offset_polygon(
-    polygon: Union[Polygon, List[Tuple[float, float]]],
-    distance: float,
-    inward: bool = True
+    polygon: Union[Polygon, List[Tuple[float, float]]], distance: float, inward: bool = True
 ) -> Optional[Polygon]:
     """
     Offset a polygon inward or outward by a given distance.
@@ -34,12 +34,7 @@ def offset_polygon(
     offset_dist = -abs(distance) if inward else abs(distance)
 
     try:
-        result = polygon.buffer(
-            offset_dist,
-            cap_style='flat',
-            join_style='mitre',
-            mitre_limit=10.0
-        )
+        result = polygon.buffer(offset_dist, cap_style="flat", join_style="mitre", mitre_limit=10.0)
 
         if result.is_empty:
             return None
@@ -59,7 +54,7 @@ def offset_polygon_pyclipper(
     polygon: Union[Polygon, List[Tuple[float, float]]],
     distance: float,
     inward: bool = True,
-    scale_factor: float = 1000.0
+    scale_factor: float = 1000.0,
 ) -> Optional[Polygon]:
     """
     Offset polygon using pyclipper (more robust for complex cases).
@@ -168,7 +163,7 @@ def point_in_polygon(point: Tuple[float, float], polygon: Polygon) -> bool:
 def rotate_polygon(
     polygon: Union[Polygon, List[Tuple[float, float]]],
     angle_degrees: float,
-    origin: Union[str, Tuple[float, float]] = 'center'
+    origin: Union[str, Tuple[float, float]] = "center",
 ) -> Polygon:
     """
     Rotate a polygon around a point.
@@ -188,9 +183,7 @@ def rotate_polygon(
 
 
 def translate_polygon(
-    polygon: Union[Polygon, List[Tuple[float, float]]],
-    xoff: float,
-    yoff: float
+    polygon: Union[Polygon, List[Tuple[float, float]]], xoff: float, yoff: float
 ) -> Polygon:
     """
     Translate (shift) a polygon.
