@@ -9,11 +9,10 @@ This demonstrates:
 """
 
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from shapely.geometry import Polygon
 import numpy as np
+from shapely.geometry import Polygon
 
-from src.data import Field, FieldParameters, create_field_with_rectangular_obstacles
+from src.data import FieldParameters, create_field_with_rectangular_obstacles
 from src.geometry import (
     generate_field_headland,
     generate_obstacle_headland,
@@ -257,7 +256,7 @@ def visualize_stage1_pipeline():
     # Also try to show (will work if display available)
     try:
         plt.show()
-    except:
+    except Exception:
         print("  (Display not available - check saved file)")
 
     print("\n" + "=" * 80)

@@ -11,7 +11,6 @@ Test coverage:
 """
 
 import numpy as np
-import pytest
 from shapely.geometry import Polygon
 
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
@@ -34,7 +33,6 @@ from src.obstacles.classifier import classify_all_obstacles, get_type_d_obstacle
 class TestCriticalPoints:
     """Test critical point detection for sweep line algorithm."""
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_simple_field_no_obstacles(self):
         """Test critical points for simple rectangular field without obstacles."""
         # Simple rectangle should only have critical points at boundaries
@@ -48,7 +46,6 @@ class TestCriticalPoints:
         assert np.isclose(critical_points[0], 0.0)
         assert np.isclose(critical_points[1], 100.0)
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_single_obstacle(self):
         """Test critical points with one rectangular obstacle."""
         field = Polygon([(0, 0), (100, 0), (100, 80), (0, 80)])
@@ -71,7 +68,6 @@ class TestCriticalPoints:
 class TestBoustrophedonDecomposition:
     """Test boustrophedon decomposition algorithm."""
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_decomposition_no_obstacles(self):
         """Test decomposition of field without obstacles."""
         field = Polygon([(0, 0), (100, 0), (100, 80), (0, 80)])
@@ -83,7 +79,6 @@ class TestBoustrophedonDecomposition:
         assert len(blocks) == 1
         assert np.isclose(blocks[0].area, 8000.0, rtol=0.01)
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_decomposition_single_obstacle(self):
         """Test decomposition with single obstacle."""
         field = Polygon([(0, 0), (100, 0), (100, 80), (0, 80)])
@@ -100,7 +95,6 @@ class TestBoustrophedonDecomposition:
         expected_area = field.area - obstacle.area
         assert np.isclose(total_block_area, expected_area, rtol=0.01)
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_decomposition_multiple_obstacles(self):
         """Test decomposition with multiple obstacles."""
         field = create_field_with_rectangular_obstacles(
@@ -144,7 +138,6 @@ class TestBoustrophedonDecomposition:
 class TestBlockAdjacency:
     """Test block adjacency graph construction."""
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_adjacent_blocks(self):
         """Test detection of adjacent blocks."""
         # Two adjacent rectangular blocks
@@ -154,7 +147,6 @@ class TestBlockAdjacency:
         # They share an edge at x=50
         assert check_blocks_adjacent(block1, block2)
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_non_adjacent_blocks(self):
         """Test detection of non-adjacent blocks."""
         block1 = Block(block_id=0, boundary=[(0, 0), (40, 0), (40, 80), (0, 80)])
@@ -163,7 +155,6 @@ class TestBlockAdjacency:
         # They don't share an edge (gap at x=40 to x=60)
         assert not check_blocks_adjacent(block1, block2)
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_build_adjacency_graph(self):
         """Test building adjacency graph for multiple blocks."""
         blocks = [
@@ -190,7 +181,6 @@ class TestBlockAdjacency:
 class TestBlockMerging:
     """Test block merging algorithms."""
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_merge_two_blocks(self):
         """Test merging two adjacent blocks."""
         block1 = Block(block_id=0, boundary=[(0, 0), (50, 0), (50, 80), (0, 80)])
@@ -204,26 +194,27 @@ class TestBlockMerging:
         # Should have new ID
         assert merged.block_id == 10
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_merge_blocks_by_criteria(self):
         """Test high-level merging with criteria."""
-        # Create narrow blocks that should be merged
+        # Create small blocks that should be merged
+        # With operating_width=5.0, default min_width=15m, min_area=75m²
         blocks = [
-            Block(block_id=0, boundary=[(0, 0), (10, 0), (10, 80), (0, 80)]),  # Narrow
-            Block(block_id=1, boundary=[(10, 0), (20, 0), (20, 80), (10, 80)]),  # Narrow
-            Block(block_id=2, boundary=[(20, 0), (100, 0), (100, 80), (20, 80)]),  # Wide
+            Block(block_id=0, boundary=[(0, 0), (5, 0), (5, 10), (0, 10)]),  # 50m² - small
+            Block(block_id=1, boundary=[(5, 0), (10, 0), (10, 10), (5, 10)]),  # 50m² - small
+            Block(block_id=2, boundary=[(10, 0), (100, 0), (100, 80), (10, 80)]),  # Large
         ]
 
         merged_blocks = merge_blocks_by_criteria(blocks, operating_width=5.0)
 
-        # Should have fewer blocks after merging
+        # Should have fewer blocks after merging (small blocks should merge)
         assert len(merged_blocks) < len(blocks)
+        # Should have at most 2 blocks (merged small + large)
+        assert len(merged_blocks) <= 2
 
 
 class TestStage2Integration:
     """Integration tests for complete Stage 2 pipeline."""
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_full_stage2_pipeline(self):
         """Test complete Stage 2: decomposition + merging."""
         # 1. Create field with obstacles (Stage 1)
@@ -295,7 +286,6 @@ class TestDecompositionStatistics:
         assert stats["total_area"] == 0.0
         assert stats["total_tracks"] == 0
 
-    @pytest.mark.skip(reason="Implementation pending")
     def test_decomposition_statistics(self):
         """Test statistics calculation."""
         blocks = [

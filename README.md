@@ -1,6 +1,6 @@
 # ACO-based Agricultural Coverage Path Planning
 
-**Implementation Status: Stage 1 Complete (40%) - Prototype Ready**
+**Implementation Status: Stage 1 & 2 Complete (65%) - Ready for ACO Optimization**
 
 Implementation of the algorithm from:
 > **"Agricultural operations planning in fields with multiple obstacle areas"**
@@ -23,10 +23,10 @@ The algorithm consists of three main stages:
 - ✅ Obstacle classification into 4 types (A, B, C, D)
 - ✅ Parallel track generation for field coverage
 
-#### ⏳ **Stage 2: Field Decomposition** (NOT IMPLEMENTED)
-- ⏳ Boustrophedon cellular decomposition
-- ⏳ Block merging via adjacency graph
-- ⏳ Track clustering into blocks
+#### ✅ **Stage 2: Field Decomposition** (COMPLETE)
+- ✅ Boustrophedon cellular decomposition
+- ✅ Block merging via adjacency graph
+- ✅ Track assignment to blocks
 
 #### ⏳ **Stage 3: Path Optimization** (NOT IMPLEMENTED)
 - ⏳ Entry/exit node generation (4 nodes per block)
@@ -37,15 +37,16 @@ The algorithm consists of three main stages:
 
 ## 📊 Current Implementation Status
 
-### ✅ What's Working (Stage 1 - 100% Complete)
+### ✅ What's Working (Stages 1 & 2 - 100% Complete)
 
 **Data Structures:**
 - Field representation with boundaries and obstacles
 - Complete parameter system (operating width, turning radius, etc.)
 - Obstacle classification system (Types A, B, C, D)
 - Track and block data structures
+- Block adjacency graph
 
-**Geometric Processing:**
+**Stage 1 - Geometric Processing:**
 - **Headland Generation**: Multi-pass field and obstacle headlands
 - **Obstacle Classification**:
   - Type A: Small obstacles (ignorable)
@@ -55,18 +56,33 @@ The algorithm consists of three main stages:
 - **Track Generation**: Parallel tracks using MBR and rotating calipers algorithm
 - **Polygon Operations**: Offset, intersection, union, rotation, etc.
 
+**Stage 2 - Field Decomposition:**
+- **Boustrophedon Decomposition**: Sweep-line based cellular decomposition
+- **Critical Point Detection**: Identifies topology changes in sweep
+- **Slice Computation**: Extracts obstacle-free cells between critical points
+- **Block Adjacency Graph**: Detects shared edges between blocks
+- **Greedy Block Merging**: Reduces block count using cost-based merging
+  - Convexity preservation
+  - Area balance optimization
+  - Shape complexity minimization
+
 **Testing:**
-- 19/19 tests passing (100% success rate)
+- 32/32 tests passing (100% success rate)
+  - 7 basic functionality tests
+  - 13 decomposition tests
+  - 9 Stage 1 integration tests
+  - 3 obstacle classification tests
 - Comprehensive integration tests
 - Edge case coverage
-- Visual demonstration script
+- Visual demonstration scripts (Stage 1 & Stage 2)
 
 ### ⏳ What's Not Implemented Yet
 
-- Field decomposition into blocks (Stage 2)
+- Entry/exit node generation for blocks (Stage 3)
 - Ant Colony Optimization solver (Stage 3)
-- Complete path optimization
-- Full visualization system (animations)
+- TSP-based block sequencing (Stage 3)
+- Complete path optimization (Stage 3)
+- Full visualization system with animations
 - Benchmark experiments to reproduce paper results
 
 ---
@@ -108,6 +124,18 @@ This generates a 3-panel visualization showing:
 3. Parallel track generation
 
 **Output:** `results/plots/stage1_demo.png`
+
+**Stage 2 Visualization Demo:**
+```bash
+python demo_stage2.py
+```
+
+This generates a 3-panel visualization showing:
+1. Field setup with headland (Stage 1)
+2. Preliminary blocks from boustrophedon decomposition
+3. Final blocks after merging with parallel tracks
+
+**Output:** `results/plots/stage2_demo.png`
 
 ### Running Tests
 
