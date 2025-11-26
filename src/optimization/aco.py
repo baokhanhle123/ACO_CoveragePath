@@ -325,6 +325,8 @@ class ACOSolver:
         nodes: List[BlockNode],
         cost_matrix: np.ndarray,
         params: Optional[ACOParameters] = None,
+        record_history: bool = False,
+        history_interval: int = 10,
     ):
         """
         Initialize ACO solver.
@@ -334,6 +336,8 @@ class ACOSolver:
             nodes: List of all entry/exit nodes
             cost_matrix: Cost matrix between nodes
             params: ACO parameters (default: use defaults)
+            record_history: Whether to record pheromone history for visualization
+            history_interval: Iterations between history snapshots
         """
         self.blocks = blocks
         self.nodes = nodes
@@ -352,6 +356,13 @@ class ACOSolver:
         self.iteration_best_costs: List[float] = []  # Best found in each iteration
         self.global_best_costs: List[float] = []  # Global best at each iteration
         self.iteration_avg_costs: List[float] = []
+
+        # History recording (for visualization)
+        self.record_history = record_history
+        self.history_interval = history_interval
+        self.pheromone_history: List[np.ndarray] = []  # Snapshots of pheromone matrices
+        self.history_iterations: List[int] = []  # Iterations where snapshots taken
+        self.history_best_solutions: List[Solution] = []  # Best solution at each snapshot
 
     def _initialize_pheromone(self) -> np.ndarray:
         """
@@ -466,6 +477,19 @@ class ACOSolver:
             if solutions:
                 self._deposit_pheromone(solutions)
 
+            # Record history for visualization
+            if self.record_history and (iteration % self.history_interval == 0 or iteration == self.params.num_iterations - 1):
+                # Only record if we have a valid best solution
+                if self.best_solution:
+                    self.pheromone_history.append(self.pheromone.copy())
+                    self.history_iterations.append(iteration)
+                    # Store a copy of the best solution
+                    self.history_best_solutions.append(Solution(
+                        path=self.best_solution.path.copy(),
+                        cost=self.best_solution.cost,
+                        block_sequence=self.best_solution.block_sequence.copy()
+                    ))
+
         if verbose:
             if self.best_solution:
                 print(f"\nFinal best solution: {self.best_solution.cost:.2f}")
@@ -485,3 +509,21 @@ class ACOSolver:
             - avg_costs_per_iteration: Average solution cost in each iteration
         """
         return (self.global_best_costs, self.iteration_avg_costs)
+
+    def get_pheromone_history(self) -> Tuple[List[int], List[np.ndarray], List[Solution]]:
+        """
+        Get pheromone history for visualization.
+
+        Returns:
+            Tuple of (iterations, pheromone_matrices, best_solutions)
+            - iterations: List of iteration numbers where snapshots were taken
+            - pheromone_matrices: List of pheromone matrix snapshots
+            - best_solutions: List of best solutions at each snapshot
+
+        Note:
+            Only available if record_history=True was set during initialization
+        """
+        if not self.record_history:
+            raise ValueError("History recording was not enabled. Set record_history=True when initializing ACOSolver.")
+
+        return (self.history_iterations, self.pheromone_history, self.history_best_solutions)

@@ -10,10 +10,15 @@ Provides tools for:
 
 from .path_animation import PathAnimator, animate_path_execution
 from .plot_utils import create_field_plot, plot_path_plan
+from .pheromone_viz import PheromoneVisualizer
+from .pheromone_animation import PheromoneAnimator, animate_pheromone_evolution
 
 __all__ = [
     "PathAnimator",
     "animate_path_execution",
     "create_field_plot",
     "plot_path_plan",
+    "PheromoneVisualizer",
+    "PheromoneAnimator",
+    "animate_pheromone_evolution",
 ]

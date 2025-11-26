@@ -244,8 +244,9 @@ class PathAnimator:
         )
         self.dynamic_artists.append(text_artist)
 
-        # Update progress bar
-        self.progress_bar_fill.set_width(progress_pct)
+        # Update progress bar (convert percentage to data coordinates)
+        bar_width_data = (self.progress_bar_width / 100.0) * progress_pct
+        self.progress_bar_fill.set_width(bar_width_data)
 
         return self.dynamic_artists
 
@@ -368,6 +369,9 @@ class PathAnimator:
         bar_y = self.ax.get_ylim()[1] * 1.08
         bar_height = (self.ax.get_ylim()[1] - self.ax.get_ylim()[0]) * 0.02
         bar_width = self.ax.get_xlim()[1] - self.ax.get_xlim()[0]
+
+        # Store bar width for animation updates
+        self.progress_bar_width = bar_width
 
         # Background
         self.progress_bar_bg = Rectangle(
