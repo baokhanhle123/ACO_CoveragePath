@@ -218,8 +218,8 @@ class Ant:
         """
         Construct complete solution.
 
-        A complete solution visits exactly 2 nodes per block (entry and exit),
-        for a total of 2 * num_blocks nodes.
+        A complete solution visits all blocks exactly once. When visiting a block,
+        we enter through one node and exit through its paired node (consecutive visits).
 
         Args:
             pheromone: Pheromone matrix
@@ -231,18 +231,82 @@ class Ant:
             Complete solution
         """
         self.reset()
+        visited_blocks = set()
 
-        # Construct path by visiting 2 nodes per block (entry and exit)
-        target_nodes = 2 * self.num_blocks
+        # Visit all blocks
+        while len(visited_blocks) < self.num_blocks:
+            # Select next entry node (must be from an unvisited block)
+            available = []
+            for node_idx in range(len(self.nodes)):
+                if node_idx in self.visited_nodes:
+                    continue
+                block_id = self.nodes[node_idx].block_id
+                if block_id in visited_blocks:
+                    continue
+                # Skip if cost is invalid
+                if self.current_node is not None:
+                    if self.cost_matrix[self.current_node][node_idx] >= 1e9:
+                        continue
+                available.append(node_idx)
 
-        while len(self.path) < target_nodes:
-            next_node = self.select_next_node(pheromone, heuristic, alpha, beta)
+            if not available:
+                break  # No valid next block
 
-            if next_node is None:
-                # No valid next node - solution is invalid
-                break
+            # Select entry node probabilistically
+            if len(available) == 1:
+                entry_node = available[0]
+            else:
+                # Calculate probabilities for available entry nodes
+                probabilities = []
+                for node_idx in available:
+                    if self.current_node is None:
+                        tau = eta = 1.0
+                    else:
+                        tau = pheromone[self.current_node][node_idx]
+                        eta = heuristic[self.current_node][node_idx]
+                    prob = (tau ** alpha) * (eta ** beta)
+                    probabilities.append(prob)
 
-            self.move_to(next_node)
+                prob_sum = sum(probabilities)
+                if prob_sum == 0:
+                    probabilities = [1.0 / len(available)] * len(available)
+                else:
+                    probabilities = [p / prob_sum for p in probabilities]
+
+                entry_node = np.random.choice(available, p=probabilities)
+
+            # Move to entry node
+            self.move_to(int(entry_node))
+            entry_block = self.nodes[entry_node].block_id
+
+            # Now find the best exit node from the same block
+            exit_nodes = []
+            for node_idx in range(len(self.nodes)):
+                if node_idx == entry_node:
+                    continue
+                if node_idx in self.visited_nodes:
+                    continue
+                if self.nodes[node_idx].block_id != entry_block:
+                    continue
+                # Check if this is a valid transition from entry
+                if self.cost_matrix[entry_node][node_idx] < 1e9:
+                    exit_nodes.append(node_idx)
+
+            if exit_nodes:
+                # Select exit node based on cost (prefer lower working distance)
+                if len(exit_nodes) == 1:
+                    exit_node = exit_nodes[0]
+                else:
+                    # Select best exit node (lowest cost)
+                    exit_costs = [self.cost_matrix[entry_node][ex] for ex in exit_nodes]
+                    best_idx = np.argmin(exit_costs)
+                    exit_node = exit_nodes[best_idx]
+
+                # Move to exit node
+                self.move_to(int(exit_node))
+
+            # Mark block as visited
+            visited_blocks.add(entry_block)
 
         # Extract block sequence
         block_sequence = [self.nodes[node_idx].block_id for node_idx in self.path]
