@@ -1,0 +1,40 @@
+{
+  "name": "Large Complex Field",
+  "description": "Complex demo with 7 obstacles - showcases algorithm power",
+  "field": {
+    "width": 100,
+    "height": 80,
+    "obstacles": [
+      {"x": 25, "y": 25, "width": 15, "height": 12},
+      {"x": 65, "y": 20, "width": 12, "height": 10},
+      {"x": 50, "y": 55, "width": 10, "height": 8},
+      {"x": 20, "y": 60, "width": 8, "height": 7},
+      {"x": 75, "y": 50, "width": 9, "height": 8},
+      {"x": 40, "y": 15, "width": 7, "height": 6},
+      {"x": 85, "y": 65, "width": 6, "height": 5}
+    ]
+  },
+  "parameters": {
+    "operating_width": 5.0,
+    "turning_radius": 3.0,
+    "num_headland_passes": 1,
+    "driving_direction": 0.0,
+    "obstacle_threshold": 5.0
+  },
+  "aco": {
+    "alpha": 1.0,
+    "beta": 2.0,
+    "rho": 0.1,
+    "q": 100.0,
+    "num_ants": 20,
+    "num_iterations": 50,
+    "elitist_weight": 2.0,
+    "record_history": true,
+    "history_interval": 5
+  },
+  "visualization": {
+    "animation_dpi": 120,
+    "animation_fps": 30,
+    "static_dpi": 150
+  }
+}
