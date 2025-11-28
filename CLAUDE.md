@@ -45,7 +45,7 @@ See detailed **Working Principles** section below ↓
 **Example**: If modifying `boustrophedon_decomposition`, first read:
 - `src/decomposition/boustrophedon.py` (the function)
 - `tests/test_decomposition.py` (how it's tested)
-- `demo_stage2.py` (how it's used downstream)
+- `examples/stage2_decomposition.py` (how it's used downstream)
 
 ### 2. Think Step-by-Step
 
@@ -84,7 +84,7 @@ See detailed **Working Principles** section below ↓
 - **Run affected tests**: After modifying Stage 2, run `pytest tests/test_decomposition.py tests/test_stage3_integration.py -v`
 - **Run full test suite before completing**: All 92 tests must pass (`pytest tests/ -v`)
 - **Check solution quality**: For ACO changes, verify efficiency is still 85-95%
-- **Verify visually**: Run demo to see if results look correct: `MPLBACKEND=Agg python demo_stage3.py`
+- **Verify visually**: Run demo to see if results look correct: `MPLBACKEND=Agg python examples/stage3_optimization.py`
 - **No silent failures**: If a test fails, fix it. Don't ignore or skip tests.
 
 **Validation checklist**:
@@ -96,7 +96,7 @@ pytest tests/test_[relevant].py -v
 pytest tests/ -v  # Must see: 92 passed
 
 # 3. Demo runs without errors
-MPLBACKEND=Agg python demo_stage3.py
+MPLBACKEND=Agg python examples/stage3_optimization.py
 
 # 4. Quality maintained (check output)
 # - Path efficiency: 85-95%
@@ -135,13 +135,13 @@ MPLBACKEND=Agg python demo_stage3.py
 2. **After modifying ACO algorithm**:
    ```bash
    # Run demo MULTIPLE times (ACO is stochastic)
-   MPLBACKEND=Agg python demo_stage3.py  # Run 1
+   MPLBACKEND=Agg python examples/stage3_optimization.py  # Run 1
    # Check: Path efficiency = 89.2%
 
-   MPLBACKEND=Agg python demo_stage3.py  # Run 2
+   MPLBACKEND=Agg python examples/stage3_optimization.py  # Run 2
    # Check: Path efficiency = 91.5%
 
-   MPLBACKEND=Agg python demo_stage3.py  # Run 3
+   MPLBACKEND=Agg python examples/stage3_optimization.py  # Run 3
    # Check: Path efficiency = 90.8%
 
    # ✓ Consistent quality across runs (85-95%)? Good.
@@ -164,7 +164,7 @@ MPLBACKEND=Agg python demo_stage3.py
 4. **Visual verification (for Stage 3 changes)**:
    ```bash
    # Generate output
-   MPLBACKEND=Agg python demo_stage3.py
+   MPLBACKEND=Agg python examples/stage3_optimization.py
    # Output: stage3_path.png, stage3_convergence.png
 
    # Verify visually:
@@ -175,7 +175,7 @@ MPLBACKEND=Agg python demo_stage3.py
 
    # Delete outputs and regenerate to confirm
    rm stage3_*.png
-   MPLBACKEND=Agg python demo_stage3.py
+   MPLBACKEND=Agg python examples/stage3_optimization.py
    # Output regenerated successfully? Good.
    ```
 
@@ -208,7 +208,7 @@ pytest tests/ -v  # Still 92 passed
 pytest tests/test_[your_changes].py -v -s  # Detailed output
 
 # 4. Visual demo (if applicable)
-MPLBACKEND=Agg python demo_stage3.py
+MPLBACKEND=Agg python examples/stage3_optimization.py
 # Check output quality
 
 # 5. Final sanity check
@@ -232,8 +232,8 @@ pytest tests/test_solution_verification.py -v -s
 - Re-run immediately: pytest tests/test_aco.py -v → PASS
 - Run full suite: pytest tests/ -v → 92 passed
 - Re-run full suite: pytest tests/ -v → 92 passed
-- Run demo: MPLBACKEND=Agg python demo_stage3.py → Efficiency 89%
-- Re-run demo: MPLBACKEND=Agg python demo_stage3.py → Efficiency 91%
+- Run demo: MPLBACKEND=Agg python examples/stage3_optimization.py → Efficiency 89%
+- Re-run demo: MPLBACKEND=Agg python examples/stage3_optimization.py → Efficiency 91%
 - ✓ Consistent quality, now truly done!
 ```
 
@@ -258,7 +258,7 @@ uv venv && source .venv/bin/activate && uv pip install -e .
 pytest tests/ -v  # Should see: 92 passed in ~1s
 
 # Run complete demo
-MPLBACKEND=Agg python demo_stage3.py
+MPLBACKEND=Agg python examples/stage3_optimization.py
 
 # Launch interactive dashboard
 .venv/bin/streamlit run streamlit_app.py
@@ -799,28 +799,32 @@ pytest tests/test_solution_verification.py -v -s
 - After modifying ACO: `pytest tests/test_aco.py tests/test_solution_verification.py -v`
 - After modifying decomposition: `pytest tests/test_decomposition.py tests/test_stage3_integration.py -v`
 
-### Running Demos
+### Running Examples
+
+All demonstration scripts are in the `examples/` directory:
 
 ```bash
-# Stage 1: Field representation
-python demo_stage1.py
+# Stage 1: Field geometric representation
+python examples/stage1_geometry.py
 # Output: results/plots/stage1_demo.png
 # Shows: headlands, classified obstacles, parallel tracks
 
-# Stage 2: Decomposition
-python demo_stage2.py
+# Stage 2: Boustrophedon decomposition
+python examples/stage2_decomposition.py
 # Output: results/plots/stage2_demo.png
 # Shows: preliminary blocks, merged blocks, track assignment
 
 # Stage 3: ACO optimization (IMPORTANT: use MPLBACKEND for headless)
-MPLBACKEND=Agg python demo_stage3.py
-# Output: stage3_path.png (coverage path), stage3_convergence.png (ACO progress)
+MPLBACKEND=Agg python examples/stage3_optimization.py
+# Output: results/plots/stage3_path.png, results/plots/stage3_convergence.png
 # Shows: optimized path, working/transition segments, convergence plot
 
 # Animation demos
-python demo_animation.py  # Path execution animation
-python demo_complete_visualization.py  # All visualizations
+python examples/path_animation_only.py        # Path execution animation only
+python examples/complete_visualization.py      # Both animations + full visualization
 ```
+
+See `examples/README.md` for detailed guide to all demonstration scripts.
 
 **Why MPLBACKEND=Agg**: Prevents matplotlib from trying to open GUI windows in headless environments (SSH, CI/CD, WSL without X11).
 
@@ -1092,7 +1096,7 @@ final_geometry = rotate_geometry(processed, -rotation_angle)  # Rotate back
 **After modifying algorithms**:
 1. Run relevant tests (e.g., `pytest tests/test_aco.py -v`)
 2. Run verification tests: `pytest tests/test_solution_verification.py -v`
-3. Manually run demo: `MPLBACKEND=Agg python demo_stage3.py`
+3. Manually run demo: `MPLBACKEND=Agg python examples/stage3_optimization.py`
 4. Check output quality visually
 
 ## Project Structure
@@ -1135,8 +1139,10 @@ src/
 
 tests/                     # 92 comprehensive tests
 scenarios/                 # Pre-configured field scenarios (JSON)
+examples/                  # User-facing demonstration scripts
+scripts/                   # Internal scripts (benchmarks, validation)
 exports/                   # Dashboard output directory
-demo_*.py                  # Command-line demonstrations
+results/                   # Demo output directory
 streamlit_app.py           # Main dashboard entry point
 ```
 
@@ -1246,7 +1252,7 @@ pytest tests/test_aco.py tests/test_path_generation.py tests/test_solution_verif
 
 5. **Run full test suite**: `pytest tests/ -v`
 
-6. **Validate visually**: `MPLBACKEND=Agg python demo_stage3.py`
+6. **Validate visually**: `MPLBACKEND=Agg python examples/stage3_optimization.py`
 
 ### Debugging a Failed Test
 

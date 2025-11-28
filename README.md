@@ -156,11 +156,13 @@ Detailed Statistics:
 
 ---
 
-### Running the Command-Line Demos
+### Running the Command-Line Examples
 
-#### **Stage 1 Demo: Field Representation**
+All demonstration scripts are organized in the `examples/` directory. See `examples/README.md` for detailed guide.
+
+#### **Stage 1 Example: Field Representation**
 ```bash
-python demo_stage1.py
+python examples/stage1_geometry.py
 ```
 **Output**: `results/plots/stage1_demo.png`
 
@@ -172,9 +174,9 @@ Shows:
 
 ---
 
-#### **Stage 2 Demo: Field Decomposition**
+#### **Stage 2 Example: Field Decomposition**
 ```bash
-python demo_stage2.py
+python examples/stage2_decomposition.py
 ```
 **Output**: `results/plots/stage2_demo.png`
 
@@ -185,17 +187,17 @@ Shows:
 
 ---
 
-#### **Stage 3 Demo: ACO Optimization** ⭐
+#### **Stage 3 Example: ACO Optimization** ⭐
 ```bash
 # For headless systems (saves images without display)
-MPLBACKEND=Agg python demo_stage3.py
+MPLBACKEND=Agg python examples/stage3_optimization.py
 
 # For systems with display
-python demo_stage3.py
+python examples/stage3_optimization.py
 ```
 **Output**:
-- `stage3_path.png` - Optimized coverage path visualization
-- `stage3_convergence.png` - ACO convergence plot
+- `results/plots/stage3_path.png` - Optimized coverage path visualization
+- `results/plots/stage3_convergence.png` - ACO convergence plot
 
 Shows:
 - Complete coverage path with color-coded working/transition segments
@@ -217,6 +219,20 @@ Path Plan:
   - Working segments: 7
   - Transitions: 6
 ```
+
+---
+
+#### **Animation Examples** ⭐
+
+```bash
+# Path execution animation only (tractor movement)
+python examples/path_animation_only.py
+
+# Complete visualization (both animations + full stats)
+python examples/complete_visualization.py
+```
+
+See `ANIMATION_GUIDE.md` for detailed animation documentation
 
 ---
 
@@ -424,19 +440,19 @@ elitist_weight = 2.0 # Extra pheromone for best solution
 
 ```
 ACO_CoveragePath/
-├── src/
-│   ├── data/              # ✅ Data structures (Field, Block, Track, Node)
-│   ├── geometry/          # ✅ Geometric operations (headland, tracks, MBR)
-│   ├── obstacles/         # ✅ Obstacle classification system
-│   ├── decomposition/     # ✅ Boustrophedon decomposition & merging
-│   ├── optimization/      # ✅ ACO algorithm & path generation
+├── src/                   # ✅ Source code
+│   ├── data/              # Data structures (Field, Block, Track, Node)
+│   ├── geometry/          # Geometric operations (headland, tracks, MBR)
+│   ├── obstacles/         # Obstacle classification system
+│   ├── decomposition/     # Boustrophedon decomposition & merging
+│   ├── optimization/      # ACO algorithm & path generation
 │   │   ├── cost_matrix.py      # Cost calculation between nodes
 │   │   ├── aco.py              # Ant Colony Optimization solver
 │   │   └── path_generation.py  # Path construction from solution
-│   ├── visualization/     # ✅ Path & pheromone animation (Phase 1)
+│   ├── visualization/     # Path & pheromone animations
 │   │   ├── path_animation.py   # PathAnimator for GIF generation
 │   │   └── pheromone_animation.py  # PheromoneAnimator
-│   └── dashboard/         # ✅ Interactive Streamlit dashboard (Phase 2A)
+│   └── dashboard/         # Interactive Streamlit dashboard
 │       ├── config_manager.py   # Scenario configuration management
 │       ├── export_utils.py     # PDF/CSV/PNG export utilities
 │       └── quick_demo.py       # Quick Demo tab implementation
@@ -452,6 +468,18 @@ ACO_CoveragePath/
 │   ├── test_stage3_integration.py       # 1 test
 │   └── test_solution_verification.py    # 4 tests
 │
+├── examples/              # ✅ User-facing demonstration scripts
+│   ├── README.md              # Complete guide to all examples
+│   ├── stage1_geometry.py     # Stage 1: Field representation
+│   ├── stage2_decomposition.py # Stage 2: Boustrophedon decomposition
+│   ├── stage3_optimization.py  # Stage 3: ACO optimization
+│   ├── path_animation_only.py  # Path execution animation
+│   └── complete_visualization.py # Both animations + full stats
+│
+├── scripts/               # ✅ Internal scripts
+│   ├── benchmarks/            # Performance testing
+│   └── validation/            # Internal validation tests
+│
 ├── scenarios/             # ✅ Pre-configured demonstration scenarios
 │   ├── small_field.json       # Small field (60×50m, 3 obstacles)
 │   ├── medium_field.json      # Medium field (80×70m, 5 obstacles)
@@ -463,26 +491,17 @@ ACO_CoveragePath/
 │   ├── data/                  # CSV data files
 │   └── images/                # Static PNG images
 │
-├── results/
-│   └── plots/            # Command-line demo visualizations
-│       ├── stage1_demo.png
-│       ├── stage2_demo.png
-│       ├── stage3_path.png
-│       └── stage3_convergence.png
+├── results/               # ✅ Example script outputs
+│   ├── animations/            # Generated animations
+│   ├── plots/                 # Visualization images
+│   ├── paths/                 # Path data
+│   └── metrics/               # Performance metrics
 │
-├── streamlit_app.py      # ✅ Main Streamlit dashboard application
-├── demo_stage1.py        # ✅ Stage 1 demonstration
-├── demo_stage2.py        # ✅ Stage 2 demonstration
-├── demo_stage3.py        # ✅ Stage 3 demonstration (ACO + visualization)
-│
-├── test_dashboard_components.py     # Dashboard component tests
-├── test_pipeline_integration.py     # End-to-end pipeline test
-│
-├── README.md             # ✅ This file (project guide)
-├── STAGE3_COMPLETION_REPORT.md      # ✅ Stage 3 technical details
-├── VERIFICATION_REPORT.md           # ✅ Verification report
-├── PHASE2A_IMPLEMENTATION_COMPLETE.md  # ✅ Dashboard documentation
-└── pyproject.toml        # Project configuration & dependencies
+├── streamlit_app.py       # ✅ Main Streamlit dashboard application
+├── README.md              # ✅ This file (project guide)
+├── ANIMATION_GUIDE.md     # ✅ Animation usage guide
+├── CLAUDE.md              # ✅ Development guide for Claude Code
+└── pyproject.toml         # ✅ Project configuration & dependencies
 ```
 
 ---

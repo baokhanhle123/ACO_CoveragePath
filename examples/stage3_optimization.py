@@ -359,13 +359,16 @@ def run_demo():
     fig1 = visualize_path(field, final_blocks, path_plan)
     fig2 = visualize_convergence(solver)
 
-    # Save figures
-    fig1.savefig("stage3_path.png", dpi=150, bbox_inches="tight")
-    fig2.savefig("stage3_convergence.png", dpi=150, bbox_inches="tight")
+    # Save figures to results/plots directory
+    import os
+    os.makedirs("results/plots", exist_ok=True)
+
+    fig1.savefig("results/plots/stage3_path.png", dpi=150, bbox_inches="tight")
+    fig2.savefig("results/plots/stage3_convergence.png", dpi=150, bbox_inches="tight")
 
     print("\n✓ Visualizations saved:")
-    print("  - stage3_path.png")
-    print("  - stage3_convergence.png")
+    print("  - results/plots/stage3_path.png")
+    print("  - results/plots/stage3_convergence.png")
 
     plt.show()
 
