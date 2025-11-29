@@ -222,9 +222,9 @@ def run_demo():
         field_width=100,
         field_height=80,
         obstacle_specs=[
-            (20, 20, 15, 12),  # Obstacle 1
-            (55, 30, 12, 15),  # Obstacle 2
-            (35, 60, 18, 10),  # Obstacle 3
+            (30, 30, 15, 12),  # Obstacle 1 (same as Stage 1 & 2)
+            (65, 50, 12, 15),  # Obstacle 2 (same as Stage 1 & 2)
+            (20, 10, 8, 8),    # Obstacle 3 (same as Stage 1 & 2)
         ],
         name="Stage 3 Demo Field",
     )
