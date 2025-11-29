@@ -275,6 +275,19 @@ def classify_all_obstacles(
     return classified_obstacles
 
 
+def get_type_b_obstacles(obstacles: List[Obstacle]) -> List[Obstacle]:
+    """
+    Filter only Type B obstacles (those intersecting with inner boundary).
+
+    Args:
+        obstacles: List of classified obstacles
+
+    Returns:
+        List containing only Type B obstacles
+    """
+    return [obs for obs in obstacles if obs.obstacle_type == ObstacleType.B]
+
+
 def get_type_d_obstacles(obstacles: List[Obstacle]) -> List[Obstacle]:
     """
     Filter only Type D obstacles (those requiring field decomposition).

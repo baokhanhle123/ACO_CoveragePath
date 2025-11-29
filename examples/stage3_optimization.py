@@ -15,7 +15,7 @@ import numpy as np
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
 from src.decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
 from src.geometry import generate_field_headland, generate_parallel_tracks
-from src.obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
+from src.obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
 from src.optimization import (
     ACOParameters,
     ACOSolver,
@@ -237,8 +237,8 @@ def run_demo():
         obstacle_threshold=5.0,
     )
 
-    # Generate headland
-    field_headland = generate_field_headland(
+    # Generate preliminary headland (to classify obstacles)
+    preliminary_headland = generate_field_headland(
         field_boundary=field.boundary_polygon,
         operating_width=params.operating_width,
         num_passes=params.num_headland_passes,
@@ -247,16 +247,28 @@ def run_demo():
     # Classify obstacles
     classified_obstacles = classify_all_obstacles(
         obstacle_boundaries=field.obstacles,
-        field_inner_boundary=field_headland.inner_boundary,
+        field_inner_boundary=preliminary_headland.inner_boundary,
         driving_direction_degrees=params.driving_direction,
         operating_width=params.operating_width,
         threshold=params.obstacle_threshold,
     )
 
+    # Extract Type B and Type D obstacles
+    type_b_obstacles = get_type_b_obstacles(classified_obstacles)
+    type_b_polygons = [obs.polygon for obs in type_b_obstacles]
     type_d_obstacles = get_type_d_obstacles(classified_obstacles)
     obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
 
-    print(f"  ✓ Field created with {len(type_d_obstacles)} Type D obstacles")
+    # Regenerate headland with Type B obstacles incorporated
+    field_headland = generate_field_headland(
+        field_boundary=field.boundary_polygon,
+        operating_width=params.operating_width,
+        num_passes=params.num_headland_passes,
+        type_b_obstacles=type_b_polygons,
+    )
+
+    print(f"  ✓ Field created with {len(type_b_obstacles)} Type B obstacles (incorporated)")
+    print(f"  ✓ {len(type_d_obstacles)} Type D obstacles for decomposition")
 
     # ====================
     # STAGE 2: Decomposition

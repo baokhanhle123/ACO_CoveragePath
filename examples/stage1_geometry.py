@@ -18,7 +18,7 @@ from src.geometry import (
     generate_obstacle_headland,
     generate_parallel_tracks,
 )
-from src.obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
+from src.obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
 
 
 def plot_polygon(ax, polygon, **kwargs):
@@ -68,9 +68,9 @@ def visualize_stage1_pipeline():
         f"headland_passes={params.num_headland_passes}"
     )
 
-    # Generate field headland
-    print("\nGenerating field headland...")
-    field_headland = generate_field_headland(
+    # Generate field headland (preliminary, to classify obstacles)
+    print("\nGenerating preliminary field headland...")
+    preliminary_headland = generate_field_headland(
         field_boundary=field.boundary_polygon,
         operating_width=params.operating_width,
         num_passes=params.num_headland_passes,
@@ -80,7 +80,7 @@ def visualize_stage1_pipeline():
     print("Classifying obstacles...")
     classified_obstacles = classify_all_obstacles(
         obstacle_boundaries=field.obstacles,
-        field_inner_boundary=field_headland.inner_boundary,
+        field_inner_boundary=preliminary_headland.inner_boundary,
         driving_direction_degrees=params.driving_direction,
         operating_width=params.operating_width,
         threshold=params.obstacle_threshold,
@@ -89,6 +89,19 @@ def visualize_stage1_pipeline():
     print(f"Classified {len(classified_obstacles)} obstacles:")
     for obs in classified_obstacles:
         print(f"  - {obs}")
+
+    # Extract Type B obstacles
+    type_b_obstacles = get_type_b_obstacles(classified_obstacles)
+    type_b_polygons = [obs.polygon for obs in type_b_obstacles]
+
+    # Regenerate field headland with Type B obstacles incorporated
+    print(f"\nIncorporating {len(type_b_obstacles)} Type B obstacles into inner boundary...")
+    field_headland = generate_field_headland(
+        field_boundary=field.boundary_polygon,
+        operating_width=params.operating_width,
+        num_passes=params.num_headland_passes,
+        type_b_obstacles=type_b_polygons,
+    )
 
     # Generate obstacle headlands
     print("\nGenerating obstacle headlands...")
@@ -222,8 +235,8 @@ def visualize_stage1_pipeline():
     )
     plot_polygon(ax3, field_headland.inner_boundary, color="blue", linewidth=2)
 
-    # Obstacles
-    for obs in classified_obstacles:
+    # Only show Type D obstacles (Type B are incorporated into inner boundary)
+    for obs in type_d_obstacles:
         plot_filled_polygon(ax3, obs.polygon, color="gray", alpha=0.6)
         plot_polygon(ax3, obs.polygon, color="black", linewidth=1.5)
 

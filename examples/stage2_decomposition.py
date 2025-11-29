@@ -22,7 +22,7 @@ from src.decomposition import (
     merge_blocks_by_criteria,
 )
 from src.geometry import generate_field_headland, generate_parallel_tracks
-from src.obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
+from src.obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
 
 
 def plot_polygon(ax, polygon, **kwargs):
@@ -75,20 +75,19 @@ def visualize_stage2_pipeline():
     print(f"Field: {field}")
     print(f"Operating width: {params.operating_width}m")
 
-    # Generate field headland
-    print("\n[Stage 1] Generating headland...")
-    field_headland = generate_field_headland(
+    # Generate preliminary headland (to classify obstacles)
+    print("\n[Stage 1] Generating preliminary headland...")
+    preliminary_headland = generate_field_headland(
         field_boundary=field.boundary_polygon,
         operating_width=params.operating_width,
         num_passes=params.num_headland_passes,
     )
-    print(f"Inner boundary area: {field_headland.inner_boundary.area:.2f}m²")
 
     # Classify obstacles
     print("\n[Stage 1] Classifying obstacles...")
     classified_obstacles = classify_all_obstacles(
         obstacle_boundaries=field.obstacles,
-        field_inner_boundary=field_headland.inner_boundary,
+        field_inner_boundary=preliminary_headland.inner_boundary,
         driving_direction_degrees=params.driving_direction,
         operating_width=params.operating_width,
         threshold=params.obstacle_threshold,
@@ -98,9 +97,23 @@ def visualize_stage2_pipeline():
     for obs in classified_obstacles:
         print(f"  - {obs}")
 
-    # Get Type D obstacles
+    # Get Type B and Type D obstacles
+    type_b_obstacles = get_type_b_obstacles(classified_obstacles)
+    type_b_polygons = [obs.polygon for obs in type_b_obstacles]
     type_d_obstacles = get_type_d_obstacles(classified_obstacles)
+
+    print(f"Type B obstacles (incorporated into inner boundary): {len(type_b_obstacles)}")
     print(f"Type D obstacles requiring decomposition: {len(type_d_obstacles)}")
+
+    # Regenerate headland with Type B obstacles incorporated
+    print("\n[Stage 1] Incorporating Type B obstacles into inner boundary...")
+    field_headland = generate_field_headland(
+        field_boundary=field.boundary_polygon,
+        operating_width=params.operating_width,
+        num_passes=params.num_headland_passes,
+        type_b_obstacles=type_b_polygons,
+    )
+    print(f"Inner boundary area (after Type B removal): {field_headland.inner_boundary.area:.2f}m²")
 
     # ========== STAGE 2: DECOMPOSITION ==========
     print("\n" + "=" * 80)

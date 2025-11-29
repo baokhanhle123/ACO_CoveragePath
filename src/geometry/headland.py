@@ -7,7 +7,7 @@ Implements Stage 1 headland generation from Zhou et al. 2014.
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from shapely.geometry import Polygon
+from shapely.geometry import MultiPolygon, Polygon
 
 from .polygon import offset_polygon
 
@@ -29,7 +29,10 @@ class HeadlandResult:
 
 
 def generate_field_headland(
-    field_boundary: Polygon, operating_width: float, num_passes: int
+    field_boundary: Polygon,
+    operating_width: float,
+    num_passes: int,
+    type_b_obstacles: Optional[List[Polygon]] = None,
 ) -> Optional[HeadlandResult]:
     """
     Generate headland area for the main field.
@@ -38,11 +41,13 @@ def generate_field_headland(
     - Distance from field boundary to first pass: w/2
     - Distance between subsequent passes: w
     - Inner boundary: w/2 from last pass
+    - Type B obstacles are incorporated into the inner boundary (removed from field body)
 
     Args:
         field_boundary: Field boundary polygon
         operating_width: Operating width of implement (w)
         num_passes: Number of headland passes (h)
+        type_b_obstacles: List of Type B obstacle polygons to incorporate into inner boundary
 
     Returns:
         HeadlandResult with passes and inner boundary, or None if generation fails
@@ -83,6 +88,21 @@ def generate_field_headland(
         print("Warning: Failed to generate inner boundary")
         # Use last pass as inner boundary
         inner_boundary = current_boundary
+
+    # Incorporate Type B obstacles into inner boundary (remove them from field body)
+    # According to paper: "Type B obstacles are incorporated into the inner boundary of the field"
+    if type_b_obstacles:
+        for type_b_obs in type_b_obstacles:
+            try:
+                # Subtract Type B obstacle from inner boundary
+                inner_boundary = inner_boundary.difference(type_b_obs)
+
+                # Handle MultiPolygon result (take largest piece)
+                if isinstance(inner_boundary, MultiPolygon):
+                    inner_boundary = max(inner_boundary.geoms, key=lambda p: p.area)
+
+            except Exception as e:
+                print(f"Warning: Failed to incorporate Type B obstacle into inner boundary: {e}")
 
     total_width = num_passes * w
 
