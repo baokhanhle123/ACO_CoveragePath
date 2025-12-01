@@ -261,8 +261,8 @@ def greedy_block_merging(
         if best_neighbor is None:
             break
 
-        # Merge the two blocks
-        new_block_id = max(b.block_id for b in block_graph.blocks) + 1
+        # Merge the two blocks (keep the smaller ID to maintain numbering continuity)
+        new_block_id = min(smallest_block.block_id, best_neighbor.block_id)
         merged_block = merge_two_blocks(smallest_block, best_neighbor, new_block_id)
 
         # Update graph: remove old blocks, add merged block
@@ -322,7 +322,7 @@ def merge_blocks_by_criteria(
         min_block_width: Minimum acceptable block width (default: 3 * operating_width)
 
     Returns:
-        List of merged blocks
+        List of merged blocks with consecutive IDs (0, 1, 2, ...)
     """
     if not blocks:
         return []
@@ -339,7 +339,15 @@ def merge_blocks_by_criteria(
     # Perform greedy merging
     merged_graph = greedy_block_merging(graph, min_block_area=min_area)
 
-    return merged_graph.blocks
+    # Renumber blocks consecutively (0, 1, 2, ...) to match paper's presentation
+    # This makes the result cleaner and easier to understand
+    final_blocks = merged_graph.blocks
+    final_blocks.sort(key=lambda b: b.block_id)  # Sort by original ID first
+
+    for new_id, block in enumerate(final_blocks):
+        block.block_id = new_id
+
+    return final_blocks
 
 
 def get_merging_statistics(
