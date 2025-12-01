@@ -135,8 +135,8 @@ INPUT: Field boundary + Obstacles + Parameters
 │ • Find critical points (sweep line)     │
 │ • Extract obstacle-free cells           │
 │ • Merge adjacent blocks                 │
-│ • Assign tracks to blocks               │
-│ Output: List[Block] with adjacency       │
+│ • Cluster global tracks into blocks     │
+│ Output: List[Block] with tracks          │
 └──────────────────────────────────────────┘
    ↓
 ┌──────────────────────────────────────────┐
@@ -162,8 +162,9 @@ INPUT: Field boundary + Obstacles + Parameters
 - **Critical points**: Sweep perpendicular to driving direction, find topology changes
 - **Coordinate rotation**: Rotate by `-driving_direction` (make East=0°), then rotate back
 - **Cell extraction**: Vertical slices → obstacle-free blocks
-- **Merging**: Adjacency-based greedy merging (reduces blocks 20-50%)
-- **Critical**: Must rotate geometry back to original coordinates
+- **Block merging**: Adjacency-based greedy merging (reduces blocks 20-50%)
+- **Track clustering**: Subdivide global tracks from Stage 1 and assign to blocks (Section 2.3.2)
+- **Critical**: Must rotate geometry back; only merge adjacent blocks
 
 **Stage 3: ACO Path Optimization** (`src/optimization/`)
 - **Nodes**: Each block → 4 nodes (first_start, first_end, last_start, last_end)
@@ -203,6 +204,12 @@ PathSegment(segment_type, waypoints, distance, block_id)
 2. Find critical x-coords (obstacle vertices, boundaries)
 3. Vertical slices → extract obstacle-free polygons
 4. Rotate back by `+driving_direction`
+
+**Track Clustering** (`src/decomposition/track_clustering.py`):
+1. Generate global tracks in Stage 1 (ignoring obstacles)
+2. For each track: subdivide at block boundaries
+3. Assign track segments to blocks based on containment
+4. Maintains global track indices for continuity
 
 **Cost Matrix** (`src/optimization/cost_matrix.py`):
 - Same node: 0
@@ -270,8 +277,8 @@ python examples/complete_visualization.py
 ```python
 from src.data import create_field_with_rectangular_obstacles, FieldParameters
 from src.geometry import generate_field_headland, generate_parallel_tracks
-from src.obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
-from src.decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
+from src.obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
+from src.decomposition import boustrophedon_decomposition, merge_blocks_by_criteria, cluster_tracks_into_blocks
 from src.optimization import ACOParameters, ACOSolver, build_cost_matrix, generate_path_from_solution
 
 # Create field
@@ -283,13 +290,20 @@ params = FieldParameters(operating_width=5.0, turning_radius=3.0, num_headland_p
 headland = generate_field_headland(field.boundary_polygon, params.operating_width, params.num_headland_passes)
 classified = classify_all_obstacles(field.obstacles, headland.inner_boundary, params.driving_direction,
                                     params.operating_width, params.obstacle_threshold)
+type_b = get_type_b_obstacles(classified)
 type_d = get_type_d_obstacles(classified)
+
+# Regenerate headland with Type B obstacles
+headland = generate_field_headland(field.boundary_polygon, params.operating_width, params.num_headland_passes,
+                                   type_b_obstacles=[o.polygon for o in type_b])
+
+# Generate global tracks (ignoring obstacles)
+global_tracks = generate_parallel_tracks(headland.inner_boundary, params.driving_direction, params.operating_width)
 
 # STAGE 2
 prelim = boustrophedon_decomposition(headland.inner_boundary, [o.polygon for o in type_d], params.driving_direction)
 blocks = merge_blocks_by_criteria(prelim, params.operating_width)
-for block in blocks:
-    block.tracks = generate_parallel_tracks(block.polygon, params.driving_direction, params.operating_width)
+blocks = cluster_tracks_into_blocks(global_tracks, blocks)  # Cluster tracks into blocks
 
 # STAGE 3
 all_nodes = []
@@ -332,6 +346,13 @@ first_start → last_start ✗   # Both starts
 rotated = rotate_geometry(original, -driving_direction_degrees)
 # ... process in rotated space ...
 final = rotate_geometry(processed, +driving_direction_degrees)  # MUST rotate back
+```
+
+### Block Merging Adjacency
+```python
+# ONLY merge blocks that share a common edge (adjacency graph)
+# Blocks are adjacent if: boundary1.intersection(boundary2).length > threshold
+# Paper requirement (Section 2.3.1): "two connected blocks have a common edge"
 ```
 
 ### ACO Convergence Tuning

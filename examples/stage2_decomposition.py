@@ -137,13 +137,31 @@ def visualize_stage2_pipeline():
 
         # Perform boustrophedon decomposition
         print("\nDecomposing field into preliminary blocks...")
+
+        # Debug: Show critical points
+        from src.decomposition import find_critical_points
+        critical_points = find_critical_points(
+            field_headland.inner_boundary,
+            obstacle_polygons,
+            params.driving_direction
+        )
+        print(f"Critical points (sweep perpendicular to driving direction {params.driving_direction}°):")
+        print(f"  {len(critical_points)} critical x-coordinates: {[f'{x:.1f}' for x in critical_points[:10]]}")
+
         preliminary_blocks = boustrophedon_decomposition(
             inner_boundary=field_headland.inner_boundary,
             obstacles=obstacle_polygons,
             driving_direction_degrees=params.driving_direction,
         )
 
-        print(f"Created {len(preliminary_blocks)} preliminary blocks")
+        print(f"\nCreated {len(preliminary_blocks)} preliminary blocks")
+
+        # Debug: Show block positions
+        print("\nBlock positions (bounding boxes):")
+        for block in preliminary_blocks:
+            bounds = block.polygon.bounds  # (minx, miny, maxx, maxy)
+            print(f"  B{block.block_id}: x=[{bounds[0]:.1f}, {bounds[2]:.1f}], "
+                  f"y=[{bounds[1]:.1f}, {bounds[3]:.1f}], area={block.area:.2f}m²")
 
         # Get decomposition statistics
         prelim_stats = get_decomposition_statistics(preliminary_blocks)
@@ -158,6 +176,14 @@ def visualize_stage2_pipeline():
         print("\n" + "=" * 80)
         print("[Stage 2] Block Merging")
         print("=" * 80)
+
+        # Show adjacency information before merging
+        from src.decomposition import build_block_adjacency_graph
+        prelim_graph = build_block_adjacency_graph(preliminary_blocks)
+        print("\nPreliminary block adjacency:")
+        for block_id in sorted(prelim_graph.adjacency.keys()):
+            neighbors = prelim_graph.adjacency[block_id]
+            print(f"  B{block_id} → adjacent to: {[f'B{n}' for n in neighbors]}")
 
         print("\nMerging blocks to reduce total count...")
         final_blocks = merge_blocks_by_criteria(

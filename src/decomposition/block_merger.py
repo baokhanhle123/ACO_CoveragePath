@@ -182,7 +182,7 @@ def merge_two_blocks(block1: Block, block2: Block, new_block_id: int) -> Block:
 
 
 def greedy_block_merging(
-    block_graph: BlockGraph, min_block_area: Optional[float] = None
+    block_graph: BlockGraph, min_block_area: Optional[float] = None, verbose: bool = False
 ) -> BlockGraph:
     """
     Perform greedy block merging to reduce total number of blocks.
@@ -196,6 +196,7 @@ def greedy_block_merging(
     Args:
         block_graph: Initial block adjacency graph
         min_block_area: Optional minimum desired block area
+        verbose: If True, print merging details
 
     Returns:
         Updated BlockGraph with merged blocks
@@ -263,6 +264,12 @@ def greedy_block_merging(
 
         # Merge the two blocks (keep the smaller ID to maintain numbering continuity)
         new_block_id = min(smallest_block.block_id, best_neighbor.block_id)
+
+        if verbose:
+            print(f"  Merging B{smallest_block.block_id} (area={smallest_block.area:.2f}) "
+                  f"+ B{best_neighbor.block_id} (area={best_neighbor.area:.2f}) "
+                  f"→ B{new_block_id} (cost={best_cost:.3f})")
+
         merged_block = merge_two_blocks(smallest_block, best_neighbor, new_block_id)
 
         # Update graph: remove old blocks, add merged block
@@ -336,8 +343,8 @@ def merge_blocks_by_criteria(
     # Build adjacency graph
     graph = build_block_adjacency_graph(blocks)
 
-    # Perform greedy merging
-    merged_graph = greedy_block_merging(graph, min_block_area=min_area)
+    # Perform greedy merging (verbose to show merging process)
+    merged_graph = greedy_block_merging(graph, min_block_area=min_area, verbose=True)
 
     # Renumber blocks consecutively (0, 1, 2, ...) to match paper's presentation
     # This makes the result cleaner and easier to understand
