@@ -105,7 +105,7 @@ def calculate_merge_cost(block1: Block, block2: Block) -> float:
         block2: Second block
 
     Returns:
-        Merge cost (lower is better)
+        Merge cost (lower is better), or float('inf') if merge violates constraints
     """
     # Merge the blocks to evaluate the result
     merged_poly = block1.polygon.union(block2.polygon)
@@ -118,6 +118,14 @@ def calculate_merge_cost(block1: Block, block2: Block) -> float:
     convex_hull = merged_poly.convex_hull
     convexity_ratio = merged_poly.area / convex_hull.area if convex_hull.area > 0 else 0
     convexity_cost = 1.0 - convexity_ratio  # 0 = perfectly convex, 1 = very concave
+
+    # CONSTRAINT: Reject highly concave merges that would create problematic shapes
+    # This prevents merging blocks where boustrophedon connections might cross obstacles
+    # Convexity ratio < 0.85 means the merged block is too concave (loses >15% to convex hull)
+    # This threshold is conservative to ensure safe boustrophedon traversal
+    MIN_CONVEXITY_RATIO = 0.85
+    if convexity_ratio < MIN_CONVEXITY_RATIO:
+        return float('inf')  # Reject this merge
 
     # Cost factor 2: Area imbalance
     # Prefer merging blocks of similar size

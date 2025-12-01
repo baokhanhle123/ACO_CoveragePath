@@ -214,7 +214,8 @@ def visualize_stage2_pipeline():
         print(f"  - Blocks: {len(final_blocks)}")
 
         # Cluster global tracks into blocks (Section 2.3.2 of paper)
-        final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks)
+        # Pass all_obstacles to enable subdivision at obstacle boundaries within blocks
+        final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_obstacles)
 
         # Get clustering statistics
         clustering_stats = get_track_clustering_statistics(final_blocks, global_tracks)

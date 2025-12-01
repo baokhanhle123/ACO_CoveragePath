@@ -336,8 +336,9 @@ def run_demo():
     )
 
     # Cluster global tracks into blocks (Section 2.3.2)
+    # Pass all_obstacles to enable subdivision at obstacle boundaries within blocks
     print(f"\n[2.5/5] Clustering {len(global_tracks)} global tracks into {len(final_blocks)} blocks...")
-    final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks)
+    final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_obstacles)
 
     total_track_segments = sum(len(block.tracks) for block in final_blocks)
     print(f"  ✓ Created {total_track_segments} track segments across {len(final_blocks)} blocks")
