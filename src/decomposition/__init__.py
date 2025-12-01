@@ -19,6 +19,12 @@ from .boustrophedon import (
     find_critical_points,
     get_decomposition_statistics,
 )
+from .track_clustering import (
+    cluster_tracks_into_blocks,
+    get_track_clustering_statistics,
+    is_track_inside_block,
+    subdivide_track_at_block,
+)
 
 __all__ = [
     # Boustrophedon decomposition
@@ -32,4 +38,9 @@ __all__ = [
     "greedy_block_merging",
     "merge_blocks_by_criteria",
     "get_merging_statistics",
+    # Track clustering
+    "cluster_tracks_into_blocks",
+    "subdivide_track_at_block",
+    "is_track_inside_block",
+    "get_track_clustering_statistics",
 ]

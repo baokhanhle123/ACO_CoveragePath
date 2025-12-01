@@ -18,7 +18,9 @@ import numpy as np
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
 from src.decomposition import (
     boustrophedon_decomposition,
+    cluster_tracks_into_blocks,
     get_decomposition_statistics,
+    get_track_clustering_statistics,
     merge_blocks_by_criteria,
 )
 from src.geometry import generate_field_headland, generate_parallel_tracks
@@ -115,6 +117,16 @@ def visualize_stage2_pipeline():
     )
     print(f"Inner boundary area (after Type B removal): {field_headland.inner_boundary.area:.2f}m²")
 
+    # Generate global tracks (ignoring obstacles) - Stage 1
+    print("\n[Stage 1] Generating global field-work tracks (ignoring obstacles)...")
+    global_tracks = generate_parallel_tracks(
+        inner_boundary=field_headland.inner_boundary,
+        driving_direction_degrees=params.driving_direction,
+        operating_width=params.operating_width,
+    )
+    print(f"Generated {len(global_tracks)} global tracks")
+    print(f"Total track length: {sum(t.length for t in global_tracks):.2f}m")
+
     # ========== STAGE 2: DECOMPOSITION ==========
     print("\n" + "=" * 80)
     print("[Stage 2] Boustrophedon Decomposition")
@@ -162,25 +174,30 @@ def visualize_stage2_pipeline():
         print(f"  - Total area: {final_stats['total_area']:.2f}m²")
         print(f"  - Average area: {final_stats['avg_area']:.2f}m²")
 
-        # Generate tracks for each block
+        # ========== STAGE 2: TRACK CLUSTERING ==========
         print("\n" + "=" * 80)
-        print("[Stage 2] Generating tracks for each block")
+        print("[Stage 2] Clustering Global Tracks into Blocks")
         print("=" * 80)
 
-        for block in final_blocks:
-            tracks = generate_parallel_tracks(
-                inner_boundary=block.polygon,
-                driving_direction_degrees=params.driving_direction,
-                operating_width=params.operating_width,
-            )
-            # Assign tracks to block
-            for i, track in enumerate(tracks):
-                track.block_id = block.block_id
-                track.index = i
-            block.tracks = tracks
+        print("\nClustering tracks from Stage 1 into blocks...")
+        print(f"  - Global tracks: {len(global_tracks)}")
+        print(f"  - Blocks: {len(final_blocks)}")
 
+        # Cluster global tracks into blocks (Section 2.3.2 of paper)
+        final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks)
+
+        # Get clustering statistics
+        clustering_stats = get_track_clustering_statistics(final_blocks, global_tracks)
+        print("\nTrack clustering statistics:")
+        print(f"  - Total track segments: {clustering_stats['total_segments']}")
+        print(f"  - Avg segments per global track: {clustering_stats['avg_segments_per_track']:.2f}")
+        print(f"  - Length preservation: {clustering_stats['length_preservation']*100:.1f}%")
+
+        # Display per-block results
+        print("\nTracks per block:")
+        for block in final_blocks:
             print(
-                f"Block {block.block_id}: {len(tracks)} tracks, "
+                f"  Block {block.block_id}: {len(block.tracks)} track segments, "
                 f"{block.get_working_distance():.2f}m total"
             )
 
