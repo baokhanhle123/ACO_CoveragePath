@@ -196,9 +196,15 @@ def visualize_stage1_pipeline():
         label="Inner boundary",
     )
 
-    # Classified obstacles with headlands
+    # Classified obstacles with headlands (color-coded by type)
     for obs in classified_obstacles:
-        plot_filled_polygon(ax2, obs.polygon, color="gray", alpha=0.4)
+        if obs.obstacle_type.name == "B":
+            color = "orange"  # Type B - near boundary
+        elif obs.obstacle_type.name == "D":
+            color = "gray"    # Type D - standard
+        else:
+            color = "lightgray"  # Type A/C if present
+        plot_filled_polygon(ax2, obs.polygon, color=color, alpha=0.4)
         plot_polygon(ax2, obs.polygon, color="black", linewidth=1.5)
 
         # Label with type
@@ -235,7 +241,11 @@ def visualize_stage1_pipeline():
     )
     plot_polygon(ax3, field_headland.inner_boundary, color="blue", linewidth=2)
 
-    # Only show Type D obstacles (Type B are incorporated into inner boundary)
+    # Show all physical obstacles (Type B and Type D)
+    # Type B are incorporated into inner boundary but still shown for clarity
+    for obs in type_b_obstacles:
+        plot_filled_polygon(ax3, obs.polygon, color="orange", alpha=0.6)
+        plot_polygon(ax3, obs.polygon, color="black", linewidth=1.5)
     for obs in type_d_obstacles:
         plot_filled_polygon(ax3, obs.polygon, color="gray", alpha=0.6)
         plot_polygon(ax3, obs.polygon, color="black", linewidth=1.5)
