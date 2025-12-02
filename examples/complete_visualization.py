@@ -24,9 +24,17 @@ print()
 # Import all required modules
 print("Importing modules...")
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
-from src.decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
+from src.decomposition import (
+    boustrophedon_decomposition,
+    cluster_tracks_into_blocks,
+    merge_blocks_by_criteria,
+)
 from src.geometry import generate_field_headland, generate_parallel_tracks
-from src.obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
+from src.obstacles.classifier import (
+    classify_all_obstacles,
+    get_type_b_obstacles,
+    get_type_d_obstacles,
+)
 from src.optimization import (
     ACOParameters, ACOSolver, build_cost_matrix,
     generate_path_from_solution
@@ -102,10 +110,35 @@ classified_obstacles = classify_all_obstacles(
 )
 print(f"✓ Obstacles classified")
 
-# Get Type D obstacles
+# Extract Type B and Type D obstacles
+type_b_obstacles = get_type_b_obstacles(classified_obstacles)
 type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
-print(f"✓ Type D obstacles: {len(type_d_obstacles)}")
+type_b_polygons = [obs.polygon for obs in type_b_obstacles]
+type_d_polygons = [obs.polygon for obs in type_d_obstacles]
+
+print(f"✓ Type B obstacles (boundary-incorporated): {len(type_b_obstacles)}")
+print(f"✓ Type D obstacles (for decomposition): {len(type_d_obstacles)}")
+
+# Regenerate headland with Type B obstacles incorporated
+field_headland = generate_field_headland(
+    field_boundary=field.boundary_polygon,
+    operating_width=params.operating_width,
+    num_passes=params.num_headland_passes,
+    type_b_obstacles=type_b_polygons,
+)
+
+# All physical obstacles must be avoided by paths
+all_physical_obstacles = type_b_polygons + type_d_polygons
+obstacle_polygons = type_d_polygons  # Only Type D for decomposition
+
+# Generate global tracks (ignoring obstacles)
+print("\nGenerating global field-work tracks...")
+global_tracks = generate_parallel_tracks(
+    inner_boundary=field_headland.inner_boundary,
+    driving_direction_degrees=params.driving_direction,
+    operating_width=params.operating_width,
+)
+print(f"✓ Generated {len(global_tracks)} global tracks")
 
 # Boustrophedon decomposition
 preliminary_blocks = boustrophedon_decomposition(
@@ -122,19 +155,15 @@ final_blocks = merge_blocks_by_criteria(
 )
 print(f"✓ Final blocks after merging: {len(final_blocks)}")
 
-# Generate tracks for each block
-print("\nGenerating tracks...")
+# Cluster global tracks into blocks
+print("\nClustering global tracks into blocks...")
+final_blocks = cluster_tracks_into_blocks(
+    global_tracks,
+    final_blocks,
+    all_physical_obstacles
+)
 for block in final_blocks:
-    tracks = generate_parallel_tracks(
-        inner_boundary=block.polygon,
-        driving_direction_degrees=params.driving_direction,
-        operating_width=params.operating_width,
-    )
-    for i, track in enumerate(tracks):
-        track.block_id = block.block_id
-        track.index = i
-    block.tracks = tracks
-    print(f"  Block {block.block_id}: {len(tracks)} tracks")
+    print(f"  Block {block.block_id}: {len(block.tracks)} track segments")
 
 print()
 
@@ -235,7 +264,8 @@ print()
 path_plan = generate_path_from_solution(
     solution=best_solution,
     blocks=final_blocks,
-    nodes=all_nodes
+    nodes=all_nodes,
+    obstacles=all_physical_obstacles  # Pass all physical obstacles
 )
 
 # Get statistics

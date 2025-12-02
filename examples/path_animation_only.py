@@ -18,9 +18,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
-from src.decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
+from src.decomposition import (
+    boustrophedon_decomposition,
+    cluster_tracks_into_blocks,
+    merge_blocks_by_criteria,
+)
 from src.geometry import generate_field_headland, generate_parallel_tracks
-from src.obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
+from src.obstacles.classifier import (
+    classify_all_obstacles,
+    get_type_b_obstacles,
+    get_type_d_obstacles,
+)
 from src.optimization import (
     ACOParameters,
     ACOSolver,
@@ -84,15 +92,41 @@ def main():
         threshold=params.obstacle_threshold,
     )
 
+    # Extract Type B and Type D obstacles
+    type_b_obstacles = get_type_b_obstacles(classified_obstacles)
     type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-    obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
+    type_b_polygons = [obs.polygon for obs in type_b_obstacles]
+    type_d_polygons = [obs.polygon for obs in type_d_obstacles]
 
-    print(f"  ✓ Type D obstacles: {len(type_d_obstacles)}")
+    print(f"  ✓ Type B obstacles (incorporated into boundary): {len(type_b_obstacles)}")
+    print(f"  ✓ Type D obstacles (for decomposition): {len(type_d_obstacles)}")
+
+    # Regenerate headland with Type B obstacles incorporated
+    field_headland = generate_field_headland(
+        field_boundary=field.boundary_polygon,
+        operating_width=params.operating_width,
+        num_passes=params.num_headland_passes,
+        type_b_obstacles=type_b_polygons,
+    )
+
+    # All physical obstacles must be avoided by paths
+    all_physical_obstacles = type_b_polygons + type_d_polygons
+    obstacle_polygons = type_d_polygons  # Only Type D for decomposition
     print()
 
     # ====================
     # Stage 2: Decomposition
     # ====================
+    # Generate global tracks (ignoring obstacles)
+    print("[2.5/6] Generating global field-work tracks...")
+    global_tracks = generate_parallel_tracks(
+        inner_boundary=field_headland.inner_boundary,
+        driving_direction_degrees=params.driving_direction,
+        operating_width=params.operating_width,
+    )
+    print(f"  ✓ Generated {len(global_tracks)} global tracks")
+    print()
+
     print("[3/6] Running boustrophedon decomposition...")
 
     preliminary_blocks = boustrophedon_decomposition(
@@ -105,19 +139,15 @@ def main():
         blocks=preliminary_blocks, operating_width=params.operating_width
     )
 
-    # Generate tracks
-    for block in final_blocks:
-        tracks = generate_parallel_tracks(
-            inner_boundary=block.polygon,
-            driving_direction_degrees=params.driving_direction,
-            operating_width=params.operating_width,
-        )
-        for i, track in enumerate(tracks):
-            track.block_id = block.block_id
-            track.index = i
-        block.tracks = tracks
-
-    print(f"  ✓ Created {len(final_blocks)} blocks")
+    # Cluster global tracks into blocks
+    print(f"\nClustering {len(global_tracks)} global tracks into {len(final_blocks)} blocks...")
+    final_blocks = cluster_tracks_into_blocks(
+        global_tracks,
+        final_blocks,
+        all_physical_obstacles
+    )
+    total_track_segments = sum(len(block.tracks) for block in final_blocks)
+    print(f"  ✓ Created {total_track_segments} track segments")
     print()
 
     # ====================
@@ -168,7 +198,12 @@ def main():
     # ====================
     print("[5/6] Generating complete coverage path...")
 
-    path_plan = generate_path_from_solution(best_solution, final_blocks, all_nodes)
+    path_plan = generate_path_from_solution(
+        best_solution,
+        final_blocks,
+        all_nodes,
+        obstacles=all_physical_obstacles  # Pass all physical obstacles
+    )
     stats = get_path_statistics(path_plan)
 
     print(f"  ✓ Total distance: {stats['total_distance']:.2f} m")
