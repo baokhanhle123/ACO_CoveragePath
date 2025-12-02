@@ -12,7 +12,7 @@ from typing import Dict
 from ..data import FieldParameters, create_field_with_rectangular_obstacles
 from ..decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
 from ..geometry import generate_field_headland, generate_parallel_tracks
-from ..obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
+from ..obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
 from ..optimization import (
     ACOParameters, ACOSolver, build_cost_matrix,
     generate_path_from_solution
@@ -83,8 +83,16 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
             threshold=params.obstacle_threshold,
         )
 
+        type_b_obstacles = get_type_b_obstacles(classified_obstacles)
         type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-        obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
+        type_b_polygons = [obs.polygon for obs in type_b_obstacles]
+        type_d_polygons = [obs.polygon for obs in type_d_obstacles]
+
+        # Only Type D obstacles used for decomposition
+        obstacle_polygons = type_d_polygons
+
+        # All physical obstacles (Type B + Type D) must be avoided by paths
+        all_physical_obstacles = type_b_polygons + type_d_polygons
 
         preliminary_blocks = boustrophedon_decomposition(
             inner_boundary=field_headland.inner_boundary,
@@ -162,7 +170,8 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
         path_plan = generate_path_from_solution(
             solution=best_solution,
             blocks=final_blocks,
-            nodes=all_nodes
+            nodes=all_nodes,
+            obstacles=all_physical_obstacles  # Pass all physical obstacles (Type B + Type D)
         )
 
         results['total_distance'] = path_plan.total_distance

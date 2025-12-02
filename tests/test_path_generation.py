@@ -19,12 +19,16 @@ from src.optimization.path_generation import (
     PathPlan,
     PathSegment,
     calculate_segment_distance,
+    check_connection_crosses_obstacle,
     create_transition_segment,
     create_working_segment,
+    create_working_segments,
+    find_connectable_track_groups,
     generate_path_from_solution,
     get_block_tracks_path,
     get_path_statistics,
 )
+from shapely.geometry import Polygon
 
 
 class TestSegmentDistance:
@@ -344,6 +348,183 @@ class TestPathIntegration:
         assert stats["num_blocks"] == 6  # block_sequence has 6 entries (2 per block)
         assert stats["num_working_segments"] == 3
         assert stats["num_transition_segments"] == 2
+
+
+class TestObstacleAvoidance:
+    """Test obstacle avoidance in path generation."""
+
+    def test_check_connection_crosses_obstacle_no_crossing(self):
+        """Test obstacle crossing detection - no crossing case."""
+        obstacle = Polygon([(40, 30), (60, 30), (60, 50), (40, 50)])
+
+        # Connection doesn't cross obstacle
+        assert not check_connection_crosses_obstacle(
+            (30, 40), (35, 40), [obstacle]
+        )
+
+    def test_check_connection_crosses_obstacle_crossing(self):
+        """Test obstacle crossing detection - crossing case."""
+        obstacle = Polygon([(40, 30), (60, 30), (60, 50), (40, 50)])
+
+        # Connection crosses through obstacle
+        assert check_connection_crosses_obstacle(
+            (30, 40), (70, 40), [obstacle]
+        )
+
+    def test_check_connection_crosses_obstacle_no_obstacles(self):
+        """Test obstacle crossing detection - no obstacles."""
+        # No obstacles - should never cross
+        assert not check_connection_crosses_obstacle(
+            (30, 40), (70, 40), []
+        )
+
+    def test_check_connection_touches_obstacle(self):
+        """Test obstacle crossing detection - just touching."""
+        obstacle = Polygon([(40, 30), (60, 30), (60, 50), (40, 50)])
+
+        # Line just touches edge (should not be flagged as crossing)
+        assert not check_connection_crosses_obstacle(
+            (30, 30), (35, 30), [obstacle]
+        )
+
+    def test_find_connectable_track_groups_no_obstacles(self):
+        """Test track grouping with no obstacles - all tracks connectable."""
+        tracks = [
+            Track(start=(10, 40), end=(90, 40), index=0),
+            Track(start=(10, 45), end=(90, 45), index=1),
+            Track(start=(10, 50), end=(90, 50), index=2),
+        ]
+
+        groups = find_connectable_track_groups(tracks, True, True, [])
+
+        # All tracks should be in one group
+        assert len(groups) == 1
+        assert groups[0] == [0, 1, 2]
+
+    def test_find_connectable_track_groups_with_obstacle(self):
+        """Test track grouping when obstacle separates tracks."""
+        # Create tracks that are split by obstacle in the middle
+        tracks = [
+            Track(start=(10, 40), end=(35, 40), index=0),
+            Track(start=(10, 45), end=(35, 45), index=1),  # Group 1
+            Track(start=(65, 40), end=(90, 40), index=2),
+            Track(start=(65, 45), end=(90, 45), index=3),  # Group 2
+        ]
+        obstacle = Polygon([(40, 30), (60, 30), (60, 50), (40, 50)])
+
+        groups = find_connectable_track_groups(tracks, True, True, [obstacle])
+
+        # Should have 2 groups
+        assert len(groups) == 2
+        assert groups[0] == [0, 1]
+        assert groups[1] == [2, 3]
+
+    def test_find_connectable_track_groups_reverse_direction(self):
+        """Test track grouping with reverse traversal direction."""
+        # Tracks separated by obstacle, but traversing in reverse
+        tracks = [
+            Track(start=(10, 40), end=(35, 40), index=0),
+            Track(start=(10, 45), end=(35, 45), index=1),
+            Track(start=(65, 40), end=(90, 40), index=2),
+            Track(start=(65, 45), end=(90, 45), index=3),
+        ]
+        obstacle = Polygon([(40, 30), (60, 30), (60, 50), (40, 50)])
+
+        # entry_is_start=False, exit_is_end=False (reverse direction)
+        groups = find_connectable_track_groups(tracks, False, False, [obstacle])
+
+        # Should still have 2 groups
+        assert len(groups) == 2
+        assert groups[0] == [0, 1]
+        assert groups[1] == [2, 3]
+
+    def test_create_working_segments_no_obstacles(self):
+        """Test create_working_segments with no obstacles - single segment."""
+        block = Block(
+            block_id=0,
+            boundary=[(0, 0), (100, 0), (100, 60), (0, 60)],
+            tracks=[
+                Track(start=(10, 40), end=(90, 40), index=0),
+                Track(start=(10, 45), end=(90, 45), index=1),
+            ],
+        )
+
+        nodes = block.create_entry_exit_nodes(start_index=0)
+        entry_node = nodes[0]  # first_start
+        exit_node = nodes[3]   # last_end
+
+        segments = create_working_segments(block, entry_node, exit_node, obstacles=[])
+
+        # Should create single working segment (no obstacles to split)
+        assert len(segments) == 1
+        assert segments[0].segment_type == "working"
+        assert segments[0].block_id == 0
+
+    def test_create_working_segments_with_obstacle(self):
+        """Test create_working_segments with obstacle splitting tracks."""
+        # Block with tracks split by obstacle
+        block = Block(
+            block_id=0,
+            boundary=[(0, 0), (100, 0), (100, 60), (0, 60)],
+            tracks=[
+                Track(start=(10, 40), end=(35, 40), index=0),
+                Track(start=(10, 45), end=(35, 45), index=1),
+                Track(start=(65, 40), end=(90, 40), index=2),
+                Track(start=(65, 45), end=(90, 45), index=3),
+            ],
+        )
+
+        nodes = block.create_entry_exit_nodes(start_index=0)
+        entry_node = nodes[0]  # first_start
+        exit_node = nodes[3]   # last_end
+
+        obstacle = Polygon([(40, 30), (60, 30), (60, 50), (40, 50)])
+
+        segments = create_working_segments(block, entry_node, exit_node, obstacles=[obstacle])
+
+        # Should create multiple segments:
+        # 1. Entry transition to first group
+        # 2. Working segment for first group
+        # 3. Transition between groups
+        # 4. Working segment for second group
+        # 5. Exit transition from last group
+        assert len(segments) >= 3  # At least: entry trans, working, working
+
+        # Should have working segments
+        working_segments = [s for s in segments if s.segment_type == "working"]
+        assert len(working_segments) >= 2  # At least 2 working segments (2 groups)
+
+        # Should have transition segments
+        transition_segments = [s for s in segments if s.segment_type == "transition"]
+        assert len(transition_segments) >= 1  # At least 1 transition between groups
+
+    def test_create_working_segments_empty_block(self):
+        """Test create_working_segments with empty block (no tracks)."""
+        block = Block(
+            block_id=0,
+            boundary=[(0, 0), (100, 0), (100, 60), (0, 60)],
+            tracks=[],
+        )
+
+        # Create nodes manually since block.create_entry_exit_nodes requires tracks
+        entry_node = BlockNode(
+            position=(10, 30),
+            block_id=0,
+            node_type="first_start",
+            index=0
+        )
+        exit_node = BlockNode(
+            position=(90, 30),
+            block_id=0,
+            node_type="last_end",
+            index=3
+        )
+
+        segments = create_working_segments(block, entry_node, exit_node, obstacles=[])
+
+        # Should create single transition segment
+        assert len(segments) == 1
+        assert segments[0].segment_type == "transition"
 
 
 if __name__ == "__main__":

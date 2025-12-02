@@ -292,9 +292,8 @@ def run_demo():
     type_d_polygons = [obs.polygon for obs in type_d_obstacles]
 
     # Regenerate headland with Type B obstacles incorporated
-    # Type B obstacles are incorporated into inner boundary to prevent tracks from squeezing
-    # between obstacle and field boundary, but they STILL participate in decomposition
-    # to ensure transitions avoid them
+    # Type B obstacles are incorporated into inner boundary (creates holes in the boundary polygon)
+    # This prevents tracks from being generated between obstacle and field boundary
     field_headland = generate_field_headland(
         field_boundary=field.boundary_polygon,
         operating_width=params.operating_width,
@@ -302,9 +301,9 @@ def run_demo():
         type_b_obstacles=type_b_polygons,
     )
 
-    print(f"  ✓ Field created with {len(type_b_obstacles)} Type B obstacles (incorporated into boundary)")
-    print(f"  ✓ {len(type_d_obstacles)} Type D obstacles")
-    print(f"  ✓ All {len(type_b_obstacles) + len(type_d_obstacles)} physical obstacles will be used for decomposition")
+    print(f"  ✓ Field created with {len(type_b_obstacles)} Type B obstacles (incorporated into boundary, creating holes)")
+    print(f"  ✓ {len(type_d_obstacles)} Type D obstacles (for boustrophedon decomposition)")
+    print(f"  ✓ All {len(type_b_obstacles) + len(type_d_obstacles)} physical obstacles must be avoided by paths")
 
     # Generate global tracks (Stage 1 - ignoring obstacles)
     print("\n[1.5/5] Generating global tracks (ignoring obstacles)...")
@@ -320,14 +319,17 @@ def run_demo():
     # ====================
     print("\n[2/5] Running boustrophedon decomposition...")
 
-    # Include BOTH Type B and Type D obstacles in decomposition
-    # Type B obstacles are physical obstacles that must be avoided by ALL paths (working + transitions)
-    # They are incorporated into inner boundary to avoid track squeezing, but still need decomposition
-    all_obstacles = type_b_polygons + type_d_polygons
+    # IMPORTANT: Only Type D obstacles participate in decomposition
+    # Type B obstacles are already incorporated into inner_boundary (creating holes)
+    # Passing Type B again would double-count them!
+
+    # However, ALL physical obstacles (Type B + Type D) are used for track clustering
+    # because tracks must be subdivided to avoid crossing any physical obstacle
+    all_physical_obstacles = type_b_polygons + type_d_polygons
 
     preliminary_blocks = boustrophedon_decomposition(
-        inner_boundary=field_headland.inner_boundary,
-        obstacles=all_obstacles,  # Both Type B and Type D
+        inner_boundary=field_headland.inner_boundary,  # Already has Type B holes
+        obstacles=type_d_polygons,  # Only Type D obstacles for sweep line events
         driving_direction_degrees=params.driving_direction,
     )
 
@@ -336,9 +338,9 @@ def run_demo():
     )
 
     # Cluster global tracks into blocks (Section 2.3.2)
-    # Pass all_obstacles to enable subdivision at obstacle boundaries within blocks
+    # Pass ALL physical obstacles (Type B + Type D) to enable subdivision at obstacle boundaries
     print(f"\n[2.5/5] Clustering {len(global_tracks)} global tracks into {len(final_blocks)} blocks...")
-    final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_obstacles)
+    final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_physical_obstacles)
 
     total_track_segments = sum(len(block.tracks) for block in final_blocks)
     print(f"  ✓ Created {total_track_segments} track segments across {len(final_blocks)} blocks")
@@ -401,7 +403,10 @@ def run_demo():
     # ====================
     print("\n[5/5] Generating complete coverage path...")
 
-    path_plan = generate_path_from_solution(best_solution, final_blocks, all_nodes)
+    path_plan = generate_path_from_solution(
+        best_solution, final_blocks, all_nodes,
+        obstacles=all_physical_obstacles  # Pass all physical obstacles (Type B + Type D)
+    )
 
     print(f"  ✓ Generated path with {len(path_plan.segments)} segments")
 

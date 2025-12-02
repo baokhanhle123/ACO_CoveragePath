@@ -105,9 +105,9 @@ def visualize_stage2_pipeline():
     type_d_obstacles = get_type_d_obstacles(classified_obstacles)
     type_d_polygons = [obs.polygon for obs in type_d_obstacles]
 
-    print(f"Type B obstacles (incorporated into boundary, also used in decomposition): {len(type_b_obstacles)}")
-    print(f"Type D obstacles: {len(type_d_obstacles)}")
-    print(f"All {len(type_b_obstacles) + len(type_d_obstacles)} physical obstacles participate in decomposition")
+    print(f"Type B obstacles (incorporated into boundary, creating holes): {len(type_b_obstacles)}")
+    print(f"Type D obstacles (for boustrophedon decomposition): {len(type_d_obstacles)}")
+    print(f"All {len(type_b_obstacles) + len(type_d_obstacles)} physical obstacles must be avoided by paths")
 
     # Regenerate headland with Type B obstacles incorporated
     print("\n[Stage 1] Incorporating Type B obstacles into inner boundary...")
@@ -135,26 +135,32 @@ def visualize_stage2_pipeline():
     print("=" * 80)
 
     try:
-        # Include BOTH Type B and Type D obstacles in decomposition
-        # Type B obstacles are physical obstacles that must be avoided by ALL paths
-        all_obstacles = type_b_polygons + type_d_polygons
+        # IMPORTANT: Only Type D obstacles participate in decomposition
+        # Type B obstacles are already incorporated into inner_boundary (creating holes)
+        # Passing Type B again would double-count them!
+
+        # However, ALL physical obstacles (Type B + Type D) are used for track clustering
+        # because tracks must be subdivided to avoid crossing any physical obstacle
+        all_physical_obstacles = type_b_polygons + type_d_polygons
 
         # Perform boustrophedon decomposition
         print("\nDecomposing field into preliminary blocks...")
+        print(f"  Type D obstacles for decomposition: {len(type_d_obstacles)}")
+        print(f"  Type B obstacles (already in inner boundary): {len(type_b_obstacles)}")
 
         # Debug: Show critical points
         from src.decomposition import find_critical_points
         critical_points = find_critical_points(
             field_headland.inner_boundary,
-            all_obstacles,
+            type_d_polygons,  # Only Type D obstacles!
             params.driving_direction
         )
         print(f"Critical points (sweep perpendicular to driving direction {params.driving_direction}°):")
         print(f"  {len(critical_points)} critical x-coordinates: {[f'{x:.1f}' for x in critical_points[:10]]}")
 
         preliminary_blocks = boustrophedon_decomposition(
-            inner_boundary=field_headland.inner_boundary,
-            obstacles=all_obstacles,  # Both Type B and Type D
+            inner_boundary=field_headland.inner_boundary,  # Already has Type B holes
+            obstacles=type_d_polygons,  # Only Type D obstacles for sweep line events
             driving_direction_degrees=params.driving_direction,
         )
 
@@ -214,8 +220,8 @@ def visualize_stage2_pipeline():
         print(f"  - Blocks: {len(final_blocks)}")
 
         # Cluster global tracks into blocks (Section 2.3.2 of paper)
-        # Pass all_obstacles to enable subdivision at obstacle boundaries within blocks
-        final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_obstacles)
+        # Pass ALL physical obstacles (Type B + Type D) to enable subdivision at obstacle boundaries
+        final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_physical_obstacles)
 
         # Get clustering statistics
         clustering_stats = get_track_clustering_statistics(final_blocks, global_tracks)
