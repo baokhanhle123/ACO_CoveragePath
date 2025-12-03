@@ -103,11 +103,9 @@ def visualize_stage2_pipeline():
     type_b_obstacles = get_type_b_obstacles(classified_obstacles)
     type_b_polygons = [obs.polygon for obs in type_b_obstacles]
     type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-    type_d_polygons = [obs.polygon for obs in type_d_obstacles]
 
-    print(f"Type B obstacles (incorporated into boundary, also used in decomposition): {len(type_b_obstacles)}")
-    print(f"Type D obstacles: {len(type_d_obstacles)}")
-    print(f"All {len(type_b_obstacles) + len(type_d_obstacles)} physical obstacles participate in decomposition")
+    print(f"Type B obstacles (incorporated into inner boundary): {len(type_b_obstacles)}")
+    print(f"Type D obstacles requiring decomposition: {len(type_d_obstacles)}")
 
     # Regenerate headland with Type B obstacles incorporated
     print("\n[Stage 1] Incorporating Type B obstacles into inner boundary...")
@@ -135,9 +133,7 @@ def visualize_stage2_pipeline():
     print("=" * 80)
 
     try:
-        # Include BOTH Type B and Type D obstacles in decomposition
-        # Type B obstacles are physical obstacles that must be avoided by ALL paths
-        all_obstacles = type_b_polygons + type_d_polygons
+        obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
 
         # Perform boustrophedon decomposition
         print("\nDecomposing field into preliminary blocks...")
@@ -146,7 +142,7 @@ def visualize_stage2_pipeline():
         from src.decomposition import find_critical_points
         critical_points = find_critical_points(
             field_headland.inner_boundary,
-            all_obstacles,
+            obstacle_polygons,
             params.driving_direction
         )
         print(f"Critical points (sweep perpendicular to driving direction {params.driving_direction}°):")
@@ -154,7 +150,7 @@ def visualize_stage2_pipeline():
 
         preliminary_blocks = boustrophedon_decomposition(
             inner_boundary=field_headland.inner_boundary,
-            obstacles=all_obstacles,  # Both Type B and Type D
+            obstacles=obstacle_polygons,
             driving_direction_degrees=params.driving_direction,
         )
 
@@ -259,14 +255,9 @@ def visualize_stage2_pipeline():
             label="Inner boundary",
         )
 
-        # Obstacles - show all physical obstacles (Type B and Type D)
+        # Obstacles
         for obs in classified_obstacles:
-            if obs.obstacle_type.name == "B":
-                color = "orange"  # Type B - near boundary
-            elif obs.obstacle_type.name == "D":
-                color = "gray"    # Type D - standard
-            else:
-                color = "lightgray"  # Type A/C if present
+            color = "red" if obs.obstacle_type.name == "D" else "gray"
             plot_filled_polygon(ax1, obs.polygon, color=color, alpha=0.5)
             plot_polygon(ax1, obs.polygon, color="black", linewidth=1.5)
 
@@ -300,11 +291,9 @@ def visualize_stage2_pipeline():
                 fontweight="bold",
             )
 
-        # All physical obstacles (Type B and Type D)
-        for obs in type_b_obstacles:
-            plot_filled_polygon(ax2, obs.polygon, color="orange", alpha=0.7)
+        # Obstacles
         for obs in type_d_obstacles:
-            plot_filled_polygon(ax2, obs.polygon, color="gray", alpha=0.7)
+            plot_filled_polygon(ax2, obs.polygon, color="red", alpha=0.7)
 
         ax2.set_xlabel("X (m)")
         ax2.set_ylabel("Y (m)")
@@ -346,11 +335,9 @@ def visualize_stage2_pipeline():
                 bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
             )
 
-        # All physical obstacles (Type B and Type D)
-        for obs in type_b_obstacles:
-            plot_filled_polygon(ax3, obs.polygon, color="orange", alpha=0.6)
+        # Obstacles
         for obs in type_d_obstacles:
-            plot_filled_polygon(ax3, obs.polygon, color="gray", alpha=0.6)
+            plot_filled_polygon(ax3, obs.polygon, color="red", alpha=0.6)
 
         ax3.set_xlabel("X (m)")
         ax3.set_ylabel("Y (m)")
