@@ -1,16 +1,18 @@
 """
 Track clustering for boustrophedon decomposition.
 
-Implements the track clustering algorithm from Zhou et al. 2014 (Section 2.3.2):
+Implements the “clustering tracks into blocks” step of Zhou et al. 2014
+([`10.1016/j.compag.2014.08.013`](http://dx.doi.org/10.1016/j.compag.2014.08.013)),
+Section 2.3.2:
+
 - Takes global tracks from Stage 1 (generated ignoring obstacles)
 - Subdivides tracks at block boundaries
-- Clusters track segments into appropriate blocks
+- Assigns each resulting segment to exactly one block.
 
-Reference:
-    Zhou, K., Jensen, A. L., Sørensen, C. G., Busato, P., & Bochtis, D. D. (2014).
-    Agricultural operations planning in fields with multiple obstacle areas.
-    Computers and Electronics in Agriculture, 109, 12-22.
-    Section 2.3.2: "Clustering tracks into blocks"
+This corresponds to the second-stage operation where the continuous
+Stage‑1 guidance lines are partitioned and associated with the block
+areas resulting from the boustrophedon decomposition, as described in
+the equations and figures in Section 2.3.2 of the paper.
 """
 
 from typing import List, Tuple

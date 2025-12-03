@@ -1,15 +1,19 @@
 """
 Boustrophedon cellular decomposition for coverage path planning.
 
-Implements the decomposition algorithm from Zhou et al. 2014 (Section 2.3):
-- Sweeps perpendicular to driving direction
-- Identifies critical points where connectivity changes
-- Creates obstacle-free cells (preliminary blocks)
+Implements the *second stage* decomposition algorithm from Zhou et al. 2014
+([`10.1016/j.compag.2014.08.013`](http://dx.doi.org/10.1016/j.compag.2014.08.013)),
+Section 2.3:
 
-Reference:
-    Zhou, K., Jensen, A. L., Sørensen, C. G., Busato, P., & Bothtis, D. D. (2014).
-    Agricultural operations planning in fields with multiple obstacle areas.
-    Computers and Electronics in Agriculture, 109, 12-22.
+- Sweeps perpendicular to the driving direction θ
+- Identifies critical points where connectivity of the free space changes
+- Creates obstacle-free cells (preliminary blocks) between consecutive
+  critical points, as illustrated in the figures of Section 2.3.
+
+This module corresponds conceptually to the boustrophedon decomposition
+step that transforms the field body (inner boundary minus Type B obstacles
+from Stage 1) and Type D obstacles into a set of obstacle-free blocks
+prior to block merging and track clustering.
 """
 
 from typing import List, Tuple

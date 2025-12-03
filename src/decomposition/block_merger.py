@@ -1,10 +1,14 @@
 """
 Block merging for boustrophedon decomposition.
 
-Implements block merging algorithm from Zhou et al. 2014 (Section 2.3.2):
-- Merges adjacent preliminary blocks to reduce total number
-- Uses adjacency graph and greedy merging strategy
-- Prioritizes merging narrow blocks first
+Implements the block-merging part of the *second stage* in Zhou et al. 2014
+([`10.1016/j.compag.2014.08.013`](http://dx.doi.org/10.1016/j.compag.2014.08.013)),
+Section 2.3.2:
+
+- Builds an adjacency graph between preliminary blocks (boustrophedon cells)
+- Greedily merges adjacent blocks to reduce their total number
+- Prioritizes merging narrow blocks first, in line with the discussion in
+  Section 2.3.2 on eliminating narrow cells while preserving good geometry.
 
 The goal is to reduce the number of blocks while maintaining:
 1. Obstacle-free cells
