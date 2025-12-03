@@ -1,32 +1,41 @@
 """
 Path generation from ACO solution.
 
-Converts the TSP solution (sequence of entry/exit nodes) into a complete
-continuous coverage path including working segments and transitions.
+Converts the optimized node sequence into a continuous coverage path with:
+- Working segments (covering tracks within blocks)
+- Transition segments (moving between blocks)
+- Waypoints for navigation
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Tuple
 
+import numpy as np
+
 from ..data.block import Block, BlockNode
-from ..data.track import Track
-from .aco import Solution
 
 
 @dataclass
 class PathSegment:
     """
-    Represents a segment of the complete coverage path.
+    Represents a segment of the coverage path.
 
-    Types:
-    - 'working': Actual coverage work (following tracks within block)
-    - 'transition': Non-working movement between blocks
+    Attributes:
+        segment_type: "working" (covering field) or "transition" (moving between blocks)
+        waypoints: List of (x, y) coordinates along segment
+        block_id: Block ID for working segments, -1 for transitions
+        distance: Total distance of segment
     """
 
-    segment_type: str  # 'working' or 'transition'
-    waypoints: List[Tuple[float, float]]  # (x, y) coordinates
-    block_id: int  # Block ID this segment belongs to (-1 for transitions)
-    distance: float  # Length of segment
+    segment_type: str  # "working" or "transition"
+    waypoints: List[Tuple[float, float]]
+    block_id: int  # Block ID for working segments, -1 for transitions
+    distance: float = 0.0
+
+    def __post_init__(self):
+        """Calculate distance if not provided."""
+        if self.distance == 0.0 and self.waypoints:
+            self.distance = calculate_segment_distance(self.waypoints)
 
 
 @dataclass
@@ -34,58 +43,66 @@ class PathPlan:
     """
     Complete coverage path plan.
 
-    Contains the full sequence of working and transition segments
-    that cover all blocks in the optimal order.
+    Attributes:
+        segments: List of path segments (working and transition)
+        total_distance: Total path distance
+        working_distance: Distance spent working (covering field)
+        transition_distance: Distance spent in transitions
+        block_sequence: Sequence of blocks visited
     """
 
-    segments: List[PathSegment]
-    total_distance: float
-    working_distance: float
-    transition_distance: float
-    block_sequence: List[int]
+    segments: List[PathSegment] = field(default_factory=list)
+    total_distance: float = 0.0
+    working_distance: float = 0.0
+    transition_distance: float = 0.0
+    block_sequence: List[int] = field(default_factory=list)
 
     def get_all_waypoints(self) -> List[Tuple[float, float]]:
-        """Get all waypoints in order as a single list."""
+        """
+        Get all waypoints in order.
+
+        Returns:
+            List of all waypoints from all segments
+        """
         waypoints = []
         for segment in self.segments:
-            # Skip first waypoint if it duplicates the last waypoint
-            if waypoints and segment.waypoints and waypoints[-1] == segment.waypoints[0]:
-                waypoints.extend(segment.waypoints[1:])
-            else:
-                waypoints.extend(segment.waypoints)
+            waypoints.extend(segment.waypoints)
         return waypoints
 
 
 def calculate_segment_distance(waypoints: List[Tuple[float, float]]) -> float:
     """
-    Calculate total distance along a sequence of waypoints.
+    Calculate total distance along waypoint sequence.
 
     Args:
         waypoints: List of (x, y) coordinates
 
     Returns:
-        Total Euclidean distance along path
+        Total distance traveled along waypoints
     """
     if len(waypoints) < 2:
         return 0.0
 
-    distance = 0.0
+    total_distance = 0.0
     for i in range(len(waypoints) - 1):
         dx = waypoints[i + 1][0] - waypoints[i][0]
         dy = waypoints[i + 1][1] - waypoints[i][1]
-        distance += (dx * dx + dy * dy) ** 0.5
+        total_distance += np.sqrt(dx * dx + dy * dy)
 
-    return distance
+    return total_distance
 
 
-def get_block_tracks_path(
-    block: Block, entry_node: BlockNode, exit_node: BlockNode
-) -> List[Tuple[float, float]]:
+def get_block_tracks_path(block: Block, entry_node: BlockNode, exit_node: BlockNode) -> List[Tuple[float, float]]:
     """
-    Get waypoints for traversing tracks within a block.
+    Generate waypoints for traversing all tracks in a block.
 
-    Follows the tracks from entry to exit, creating a boustrophedon
-    (back-and-forth) pattern.
+    Creates a continuous path through the block following the
+    boustrophedon (back-and-forth) pattern.
+
+    Strategy:
+    1. Determine entry and exit tracks from node types
+    2. Traverse tracks in order from entry to exit
+    3. Alternate direction on each track (back-and-forth)
 
     Args:
         block: Block to traverse
@@ -93,77 +110,92 @@ def get_block_tracks_path(
         exit_node: Exit node
 
     Returns:
-        List of waypoints following the tracks
+        List of waypoints traversing all tracks in block
     """
     if not block.tracks:
         return []
 
     waypoints = []
 
-    # Determine traversal direction based on entry/exit nodes
-    # Entry at start side, exit at end side: forward traversal
-    # Entry at end side, exit at start side: reverse traversal
+    # Determine entry and exit positions
+    entry_type = entry_node.node_type
+    exit_type = exit_node.node_type
 
-    entry_is_start = "start" in entry_node.node_type
-    exit_is_end = "end" in exit_node.node_type
-
-    if entry_is_start and exit_is_end:
-        # Forward: start to end
-        for i, track in enumerate(block.tracks):
-            if i % 2 == 0:
-                # Even track: traverse start → end
-                waypoints.append(track.start)
-                waypoints.append(track.end)
-            else:
-                # Odd track: traverse end → start
-                waypoints.append(track.end)
-                waypoints.append(track.start)
+    # Determine track traversal order
+    # Entry node determines starting track
+    if "first" in entry_type:
+        # Start from first track
+        start_idx = 0
+        end_idx = len(block.tracks) - 1
+        forward = True
     else:
-        # Reverse: end to start
-        for i in range(len(block.tracks) - 1, -1, -1):
+        # Start from last track
+        start_idx = len(block.tracks) - 1
+        end_idx = 0
+        forward = False
+
+    # Determine initial direction
+    if "start" in entry_type:
+        start_from_start = True
+    else:
+        start_from_start = False
+
+    # Traverse tracks
+    current_direction = start_from_start
+
+    if forward:
+        # Traverse tracks forward (first to last)
+        for i in range(start_idx, end_idx + 1):
             track = block.tracks[i]
-            if i % 2 == 0:
-                # Even track: traverse end → start
-                waypoints.append(track.end)
+            if current_direction:
+                # Traverse start -> end
                 waypoints.append(track.start)
+                waypoints.append(track.end)
             else:
-                # Odd track: traverse start → end
+                # Traverse end -> start
+                waypoints.append(track.end)
+                waypoints.append(track.start)
+            # Alternate direction for next track
+            current_direction = not current_direction
+    else:
+        # Traverse tracks backward (last to first)
+        for i in range(start_idx, end_idx - 1, -1):
+            track = block.tracks[i]
+            if current_direction:
+                # Traverse start -> end
                 waypoints.append(track.start)
                 waypoints.append(track.end)
+            else:
+                # Traverse end -> start
+                waypoints.append(track.end)
+                waypoints.append(track.start)
+            # Alternate direction for next track
+            current_direction = not current_direction
 
     return waypoints
 
 
-def create_transition_segment(
-    from_node: BlockNode, to_node: BlockNode
-) -> PathSegment:
+def create_transition_segment(node_from: BlockNode, node_to: BlockNode) -> PathSegment:
     """
     Create transition segment between two nodes.
 
-    For now, creates a simple straight-line transition.
-    Future: Could incorporate turning radius constraints.
+    A transition segment connects the exit node of one block
+    to the entry node of another block.
 
     Args:
-        from_node: Source node
-        to_node: Destination node
+        node_from: Exit node of previous block
+        node_to: Entry node of next block
 
     Returns:
         Transition path segment
     """
-    waypoints = [from_node.position, to_node.position]
+    waypoints = [node_from.position, node_to.position]
     distance = calculate_segment_distance(waypoints)
 
-    return PathSegment(
-        segment_type="transition",
-        waypoints=waypoints,
-        block_id=-1,  # No specific block
-        distance=distance,
-    )
+    return PathSegment(segment_type="transition", waypoints=waypoints, block_id=-1, distance=distance)
 
 
-def create_working_segment(
-    block: Block, entry_node: BlockNode, exit_node: BlockNode
-) -> PathSegment:
+def create_working_segment(block: Block, entry_node: BlockNode, exit_node: BlockNode) -> PathSegment:
     """
     Create working segment for covering a block.
 
@@ -173,32 +205,40 @@ def create_working_segment(
         exit_node: Exit node
 
     Returns:
-        Working path segment
+        Working path segment with all waypoints
     """
-    # Get track waypoints
+    # Get waypoints for traversing block tracks
     track_waypoints = get_block_tracks_path(block, entry_node, exit_node)
 
-    # Add entry transition (from entry node to first track point)
-    waypoints = [entry_node.position] + track_waypoints + [exit_node.position]
+    # Build waypoints: entry + track waypoints + exit
+    # Keep all points to ensure proper path representation
+    waypoints = [entry_node.position]
+
+    if track_waypoints:
+        waypoints.extend(track_waypoints)
+
+    waypoints.append(exit_node.position)
 
     distance = calculate_segment_distance(waypoints)
 
-    return PathSegment(
-        segment_type="working",
-        waypoints=waypoints,
-        block_id=block.block_id,
-        distance=distance,
-    )
+    return PathSegment(segment_type="working", waypoints=waypoints, block_id=block.block_id, distance=distance)
 
 
-def generate_path_from_solution(
-    solution: Solution, blocks: List[Block], nodes: List[BlockNode]
-) -> PathPlan:
+def generate_path_from_solution(solution, blocks: List[Block], nodes: List[BlockNode]) -> PathPlan:
     """
     Generate complete coverage path from ACO solution.
 
-    Takes the TSP solution (sequence of nodes) and converts it into
-    a complete path with working and transition segments.
+    Converts the optimized node sequence into a continuous path with:
+    1. Working segments for each block (covering all tracks)
+    2. Transition segments between blocks
+
+    Algorithm:
+    1. Validate solution
+    2. Group consecutive nodes by block
+    3. For each block pair:
+        a. Create working segment for block
+        b. Create transition segment to next block (if any)
+    4. Calculate statistics
 
     Args:
         solution: ACO solution with node sequence
@@ -206,39 +246,64 @@ def generate_path_from_solution(
         nodes: List of all nodes
 
     Returns:
-        Complete path plan
-    """
-    if not solution.is_valid(len(blocks)):
-        raise ValueError("Solution is not valid - cannot generate path")
+        Complete path plan with segments and statistics
 
+    Raises:
+        ValueError: If solution is invalid
+    """
+    # Validate solution
+    if not solution.is_valid(len(blocks)):
+        raise ValueError(f"Solution is not valid for {len(blocks)} blocks")
+
+    # Build path segments
     segments = []
     working_distance = 0.0
     transition_distance = 0.0
 
-    # Create lookup maps
-    block_map = {block.block_id: block for block in blocks}
+    # Process node pairs (entry and exit for each block)
+    i = 0
+    while i < len(solution.path):
+        # Get current node
+        node_idx = solution.path[i]
+        current_node = nodes[node_idx]
+        block_id = current_node.block_id
+        block = blocks[block_id]
 
-    # Process each consecutive pair of nodes in solution
-    for i in range(len(solution.path) - 1):
-        from_node_idx = solution.path[i]
-        to_node_idx = solution.path[i + 1]
+        # Find matching exit node (next node with same block_id)
+        if i + 1 < len(solution.path):
+            next_node_idx = solution.path[i + 1]
+            next_node = nodes[next_node_idx]
 
-        from_node = nodes[from_node_idx]
-        to_node = nodes[to_node_idx]
+            if next_node.block_id == block_id:
+                # Found exit node for this block
+                exit_node = next_node
 
-        # Check if same block (working) or different block (transition)
-        if from_node.block_id == to_node.block_id:
-            # Working segment - cover this block's tracks
-            block = block_map[from_node.block_id]
-            segment = create_working_segment(block, from_node, to_node)
-            segments.append(segment)
-            working_distance += segment.distance
+                # Create working segment
+                working_seg = create_working_segment(block, current_node, exit_node)
+                segments.append(working_seg)
+                working_distance += working_seg.distance
+
+                # Check if there's a next block (transition needed)
+                if i + 2 < len(solution.path):
+                    next_block_node_idx = solution.path[i + 2]
+                    next_block_node = nodes[next_block_node_idx]
+
+                    # Create transition segment
+                    transition_seg = create_transition_segment(exit_node, next_block_node)
+                    segments.append(transition_seg)
+                    transition_distance += transition_seg.distance
+
+                # Move to next block
+                i += 2
+            else:
+                # Unexpected: consecutive nodes from different blocks
+                # Skip this node
+                i += 1
         else:
-            # Transition segment - move between blocks
-            segment = create_transition_segment(from_node, to_node)
-            segments.append(segment)
-            transition_distance += segment.distance
+            # Last node, no exit pair
+            i += 1
 
+    # Calculate total distance
     total_distance = working_distance + transition_distance
 
     return PathPlan(
@@ -252,26 +317,31 @@ def generate_path_from_solution(
 
 def get_path_statistics(path_plan: PathPlan) -> dict:
     """
-    Calculate statistics about the path plan.
+    Calculate statistics for path plan.
 
     Args:
-        path_plan: Path plan to analyze
+        path_plan: Complete path plan
 
     Returns:
-        Dictionary with path statistics
+        Dictionary with statistics:
+        - total_distance: Total path distance
+        - working_distance: Distance covering field
+        - transition_distance: Distance in transitions
+        - efficiency: working_distance / total_distance
+        - num_blocks: Number of blocks visited
+        - num_segments: Total number of segments
+        - num_working_segments: Number of working segments
+        - num_transition_segments: Number of transition segments
+        - total_waypoints: Total number of waypoints
     """
-    num_segments = len(path_plan.segments)
-    num_working = sum(1 for s in path_plan.segments if s.segment_type == "working")
-    num_transitions = sum(
-        1 for s in path_plan.segments if s.segment_type == "transition"
-    )
+    working_segments = [s for s in path_plan.segments if s.segment_type == "working"]
+    transition_segments = [s for s in path_plan.segments if s.segment_type == "transition"]
 
-    total_waypoints = sum(len(s.waypoints) for s in path_plan.segments)
-
-    # Calculate efficiency (working distance / total distance)
     efficiency = 0.0
     if path_plan.total_distance > 0:
         efficiency = path_plan.working_distance / path_plan.total_distance
+
+    all_waypoints = path_plan.get_all_waypoints()
 
     return {
         "total_distance": path_plan.total_distance,
@@ -279,8 +349,8 @@ def get_path_statistics(path_plan: PathPlan) -> dict:
         "transition_distance": path_plan.transition_distance,
         "efficiency": efficiency,
         "num_blocks": len(path_plan.block_sequence),
-        "num_segments": num_segments,
-        "num_working_segments": num_working,
-        "num_transition_segments": num_transitions,
-        "total_waypoints": total_waypoints,
+        "num_segments": len(path_plan.segments),
+        "num_working_segments": len(working_segments),
+        "num_transition_segments": len(transition_segments),
+        "total_waypoints": len(all_waypoints),
     }
