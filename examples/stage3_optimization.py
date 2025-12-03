@@ -152,18 +152,22 @@ def visualize_convergence(solver, title="ACO Convergence"):
 
     # Add improvement annotation
     if len(best_costs) > 0:
-        initial_best = best_costs[0]
+        # Use the first finite positive best cost as the "initial" reference
+        finite_best_costs = [c for c in best_costs if np.isfinite(c) and c > 0]
         final_best = best_costs[-1]
-        improvement = ((initial_best - final_best) / initial_best) * 100
-        ax.text(
-            0.02,
-            0.98,
-            f"Improvement: {improvement:.1f}%\nInitial: {initial_best:.2f}\nFinal: {final_best:.2f}",
-            transform=ax.transAxes,
-            fontsize=10,
-            verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
-        )
+
+        if finite_best_costs and np.isfinite(final_best) and final_best > 0:
+            initial_best = finite_best_costs[0]
+            improvement = ((initial_best - final_best) / initial_best) * 100
+            ax.text(
+                0.02,
+                0.98,
+                f"Improvement: {improvement:.1f}%\nInitial: {initial_best:.2f}\nFinal: {final_best:.2f}",
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+            )
 
     plt.tight_layout()
     return fig
@@ -188,13 +192,18 @@ def print_summary(field, blocks, path_plan, solver):
     print("\n[ACO OPTIMIZATION]")
     best_costs, _ = solver.get_convergence_data()
     if best_costs:
-        initial_best = best_costs[0]
+        finite_best_costs = [c for c in best_costs if np.isfinite(c) and c > 0]
         final_best = best_costs[-1]
-        improvement = ((initial_best - final_best) / initial_best) * 100
-        print(f"  Initial best cost: {initial_best:.2f}")
-        print(f"  Final best cost: {final_best:.2f}")
-        print(f"  Improvement: {improvement:.1f}%")
-        print(f"  Iterations: {len(best_costs)}")
+
+        if finite_best_costs and np.isfinite(final_best) and final_best > 0:
+            initial_best = finite_best_costs[0]
+            improvement = ((initial_best - final_best) / initial_best) * 100
+            print(f"  Initial best cost: {initial_best:.2f}")
+            print(f"  Final best cost: {final_best:.2f}")
+            print(f"  Improvement: {improvement:.1f}%")
+            print(f"  Iterations: {len(best_costs)}")
+        else:
+            print("  Improvement: N/A (insufficient valid convergence data)")
 
     print("\n[PATH PLAN]")
     stats = get_path_statistics(path_plan)
@@ -209,9 +218,23 @@ def print_summary(field, blocks, path_plan, solver):
     print("\n" + "=" * 80)
 
 
-def run_demo():
-    """Run complete Stage 3 demonstration."""
+def run_demo(seed=None):
+    """
+    Run complete Stage 3 demonstration.
+
+    This corresponds to Stage 3 (ACO-based block sequence optimization) in
+    Zhou et al. 2014, "Agricultural operations planning in fields with
+    multiple obstacle areas" (Comput. Electron. Agric. 109, 12–22,
+    doi:10.1016/j.compag.2014.08.013), Section 2.4.
+
+    Args:
+        seed: Optional integer random seed for reproducible ACO runs.
+    """
     print("Starting Stage 3 Demo...")
+
+    # Optional reproducibility for debugging / experiments
+    if seed is not None:
+        np.random.seed(seed)
 
     # ====================
     # STAGE 1: Field Setup
@@ -319,19 +342,29 @@ def run_demo():
     # ====================
     print("\n[4/5] Running ACO optimization...")
 
-    # Build cost matrix
+    # Build cost matrix (Section 2.4.1):
+    # - Within-block transitions use total working distance for the block
+    # - Between-block transitions use Euclidean distance between nodes
+    #   (turning_penalty is set to 0.0 in this demo for simplicity)
     cost_matrix = build_cost_matrix(
         blocks=final_blocks, nodes=all_nodes, turning_penalty=0.0
     )
 
-    # Create ACO solver with good parameters
+    # Number of ants: the paper suggests using roughly one ant per node.
+    # We follow that recommendation but cap the count for demo runtime.
+    num_nodes = len(all_nodes)
+    num_ants = min(max(num_nodes, 10), 40)
+
+    # Create ACO solver with practically tuned parameters
+    # (Paper uses β=5.0 and ρ=0.5; here we use a slightly lower β and ρ
+    #  for smoother convergence in this interactive demo.)
     aco_params = ACOParameters(
         alpha=1.0,
         beta=2.0,
         rho=0.1,
         q=100.0,
-        num_ants=30,  # More ants for better exploration
-        num_iterations=100,  # More iterations for convergence
+        num_ants=num_ants,
+        num_iterations=100,
         elitist_weight=2.0,
     )
 
@@ -382,7 +415,10 @@ def run_demo():
     print("  - results/plots/stage3_path.png")
     print("  - results/plots/stage3_convergence.png")
 
-    plt.show()
+    try:
+        plt.show()
+    except Exception:
+        print("  (Display not available - check saved files)")
 
     print("\nStage 3 Demo Complete!")
 
