@@ -214,6 +214,7 @@ class PathAnimator:
         figsize=(16, 10),
         speed_factor=1.0,
         show_stats=True,
+        trail_gap=0,
     ):
         """
         Initialize the path animator.
@@ -226,6 +227,7 @@ class PathAnimator:
             figsize: Figure size tuple
             speed_factor: Animation speed multiplier (1.0 = normal, >1.0 = faster)
             show_stats: Whether to show statistics overlay
+            trail_gap: Number of waypoints behind vehicle to leave gap (0 = path connects exactly to vehicle, default: 0)
         """
         self.field = field
         self.blocks = blocks
@@ -233,6 +235,7 @@ class PathAnimator:
         self.stats = stats
         self.speed_factor = speed_factor
         self.show_stats = show_stats
+        self.trail_gap = max(0, int(trail_gap))  # Ensure non-negative integer
 
         # Flatten all waypoints with segment information
         self.waypoints = []
@@ -429,12 +432,19 @@ class PathAnimator:
         plt.tight_layout()
 
     def _update_path_drawing(self, current_index):
-        """Update the path drawing up to current_index."""
+        """Update the path drawing up to the vehicle's current position (trail effect)."""
+        # Calculate the maximum waypoint index to draw
+        # If trail_gap is 0, path extends exactly to vehicle position
+        # If trail_gap > 0, path extends to current_index - trail_gap (leaving a gap)
+        # The trail effect comes from only showing traveled path (no path ahead), not from leaving a gap
+        max_draw_index = max(0, current_index - self.trail_gap)
+        
         # Determine which segments and waypoints to show
         segments_drawn = set()
         waypoints_to_draw = {}
 
-        for i in range(min(current_index + 1, len(self.waypoints))):
+        # Draw waypoints up to max_draw_index (extends to vehicle when trail_gap=0)
+        for i in range(min(max_draw_index + 1, len(self.waypoints))):
             seg_idx = self.waypoint_segments[i]
             segments_drawn.add(seg_idx)
 
@@ -659,6 +669,12 @@ def main():
     parser.add_argument(
         "--no-stats", action="store_true", help="Hide statistics overlay"
     )
+    parser.add_argument(
+        "--trail-gap",
+        type=int,
+        default=0,
+        help="Number of waypoints behind vehicle to leave gap (0 = path connects exactly to vehicle, default: 0)",
+    )
 
     args = parser.parse_args()
 
@@ -677,6 +693,7 @@ def main():
         stats=stats,
         speed_factor=args.speed,
         show_stats=not args.no_stats,
+        trail_gap=args.trail_gap,
     )
 
     # Determine save path
