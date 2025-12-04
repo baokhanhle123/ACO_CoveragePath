@@ -237,7 +237,10 @@ class PathAnimator:
         self.show_stats = show_stats
         self.trail_gap = max(0, int(trail_gap))  # Ensure non-negative integer
 
-        # Flatten all waypoints with segment information
+        # Flatten all waypoints with segment information.
+        # IMPORTANT: we keep *all* waypoints (including duplicates at segment
+        # boundaries) so that geometry is never lost. Zero-length steps simply
+        # contribute 0 to the cumulative distance.
         self.waypoints = []
         self.waypoint_segments = []  # Track which segment each waypoint belongs to
         self.waypoint_distances = []  # Cumulative distance at each waypoint
@@ -245,20 +248,17 @@ class PathAnimator:
         cumulative_distance = 0.0
         prev_waypoint = None
         for seg_idx, segment in enumerate(path_plan.segments):
-            for wp_idx, waypoint in enumerate(segment.waypoints):
-                # Skip duplicate waypoints at segment boundaries (except first segment)
-                if prev_waypoint is not None and waypoint == prev_waypoint:
-                    continue
-                
+            for waypoint in segment.waypoints:
+                # Store geometry for animation
                 self.waypoints.append(waypoint)
                 self.waypoint_segments.append(seg_idx)
-                
-                # Calculate distance from previous waypoint
+
+                # Update distance (0 added when consecutive waypoints are identical)
                 if prev_waypoint is not None:
                     dx = waypoint[0] - prev_waypoint[0]
                     dy = waypoint[1] - prev_waypoint[1]
                     cumulative_distance += np.sqrt(dx * dx + dy * dy)
-                
+
                 self.waypoint_distances.append(cumulative_distance)
                 prev_waypoint = waypoint
 
