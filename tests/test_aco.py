@@ -168,18 +168,24 @@ class TestAnt:
         assert len(available) == 8
 
     def test_ant_get_available_nodes_after_visit(self):
-        """Test getting available nodes after visiting a block."""
+        """Test getting available nodes after entering a block.
+
+        CRITICAL: After entering a block, the ant MUST exit it before visiting other blocks.
+        This ensures consecutive entry/exit pairs in the solution.
+        """
         ant = Ant(self.nodes, self.blocks, self.cost_matrix)
 
-        # Move to first node of block 0
+        # Move to first node of block 0 (entering block 0)
         ant.move_to(0)
 
         available = ant.get_available_nodes()
 
         # Should not include current node
         assert 0 not in available
-        # Should include nodes from unvisited block 1
-        assert any(node_idx in available for node_idx in [4, 5, 6, 7])
+        # Should ONLY include other nodes from block 0 (must exit before visiting other blocks)
+        for node_idx in available:
+            assert self.nodes[node_idx].block_id == 0, \
+                f"After entering block 0, only block 0 nodes should be available, but got node {node_idx} from block {self.nodes[node_idx].block_id}"
 
     def test_ant_move_to(self):
         """Test ant movement."""

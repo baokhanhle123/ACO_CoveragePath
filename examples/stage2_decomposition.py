@@ -23,8 +23,7 @@ from src.decomposition import (
     get_track_clustering_statistics,
     merge_blocks_by_criteria,
 )
-from src.geometry import generate_field_headland, generate_parallel_tracks
-from src.obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
+from src.stage1 import Stage1Result, run_stage1_pipeline
 
 
 def plot_polygon(ax, polygon, **kwargs):
@@ -44,14 +43,31 @@ def plot_filled_polygon(ax, polygon, **kwargs):
 
 
 def visualize_stage2_pipeline():
-    """Visualize complete Stage 2 pipeline with decomposition."""
+    """
+    Visualize complete Stage 2 pipeline with decomposition.
+
+    This demo corresponds to the *second stage* in Zhou et al. 2014,
+    "Agricultural operations planning in fields with multiple obstacle
+    areas" ([`10.1016/j.compag.2014.08.013`](http://dx.doi.org/10.1016/j.compag.2014.08.013)),
+    Section 2.3:
+
+    1. Start from Stage 1 outputs (inner boundary, Type D obstacles,
+       and global tracks).
+    2. Perform boustrophedon cellular decomposition of the field body
+       around Type D obstacles (Sec. 2.3.1).
+    3. Merge adjacent preliminary blocks to reduce their number while
+       avoiding very narrow cells (Sec. 2.3.2).
+    4. Cluster global tracks into the final blocks by subdividing them
+       at block boundaries and assigning segments to blocks, following
+       the “clustering tracks into blocks” description in Sec. 2.3.2.
+    """
 
     print("=" * 80)
     print("STAGE 2 DEMO: BOUSTROPHEDON DECOMPOSITION")
     print("=" * 80)
 
-    # ========== STAGE 1 SETUP ==========
-    print("\n[Stage 1] Setting up field...")
+    # ========== STAGE 1 SETUP (via Stage1Result) ==========
+    print("\n[Stage 1] Setting up field and running Stage 1 pipeline...")
 
     # Create field with multiple obstacles
     field = create_field_with_rectangular_obstacles(
@@ -65,7 +81,7 @@ def visualize_stage2_pipeline():
         name="Stage 2 Demo Field",
     )
 
-    # Parameters
+    # Parameters (same as Stage 1 demo for consistency)
     params = FieldParameters(
         operating_width=5.0,
         turning_radius=3.0,
@@ -77,57 +93,27 @@ def visualize_stage2_pipeline():
     print(f"Field: {field}")
     print(f"Operating width: {params.operating_width}m")
 
-    # Generate preliminary headland (to classify obstacles)
-    print("\n[Stage 1] Generating preliminary headland...")
-    preliminary_headland = generate_field_headland(
-        field_boundary=field.boundary_polygon,
-        operating_width=params.operating_width,
-        num_passes=params.num_headland_passes,
-    )
+    # Run full Stage 1 pipeline (Section 2.2 of Zhou et al. 2014)
+    stage1: Stage1Result = run_stage1_pipeline(field, params)
 
-    # Classify obstacles
-    print("\n[Stage 1] Classifying obstacles...")
-    classified_obstacles = classify_all_obstacles(
-        obstacle_boundaries=field.obstacles,
-        field_inner_boundary=preliminary_headland.inner_boundary,
-        driving_direction_degrees=params.driving_direction,
-        operating_width=params.operating_width,
-        threshold=params.obstacle_threshold,
-    )
+    classified_obstacles = stage1.classified_obstacles
+    type_d_obstacles = stage1.type_d_obstacles
+    field_headland = stage1.field_headland
+    global_tracks = stage1.tracks
 
-    print(f"Classified {len(classified_obstacles)} obstacles:")
+    print(f"\n[Stage 1] Classified {len(classified_obstacles)} obstacles:")
     for obs in classified_obstacles:
         print(f"  - {obs}")
 
-    # Get Type B and Type D obstacles
-    type_b_obstacles = get_type_b_obstacles(classified_obstacles)
-    type_b_polygons = [obs.polygon for obs in type_b_obstacles]
-    type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-    type_d_polygons = [obs.polygon for obs in type_d_obstacles]
-
-    print(f"Type B obstacles (incorporated into boundary, creating holes): {len(type_b_obstacles)}")
-    print(f"Type D obstacles (for boustrophedon decomposition): {len(type_d_obstacles)}")
-    print(f"All {len(type_b_obstacles) + len(type_d_obstacles)} physical obstacles must be avoided by paths")
-
-    # Regenerate headland with Type B obstacles incorporated
-    print("\n[Stage 1] Incorporating Type B obstacles into inner boundary...")
-    field_headland = generate_field_headland(
-        field_boundary=field.boundary_polygon,
-        operating_width=params.operating_width,
-        num_passes=params.num_headland_passes,
-        type_b_obstacles=type_b_polygons,
+    print(f"\n[Stage 1] Type B obstacles (incorporated into inner boundary): "
+          f"{len(stage1.type_b_obstacles)}")
+    print(f"[Stage 1] Type D obstacles requiring decomposition: {len(type_d_obstacles)}")
+    print(
+        f"[Stage 1] Inner boundary area (after Type B removal): "
+        f"{field_headland.inner_boundary.area:.2f}m²"
     )
-    print(f"Inner boundary area (after Type B removal): {field_headland.inner_boundary.area:.2f}m²")
-
-    # Generate global tracks (ignoring obstacles) - Stage 1
-    print("\n[Stage 1] Generating global field-work tracks (ignoring obstacles)...")
-    global_tracks = generate_parallel_tracks(
-        inner_boundary=field_headland.inner_boundary,
-        driving_direction_degrees=params.driving_direction,
-        operating_width=params.operating_width,
-    )
-    print(f"Generated {len(global_tracks)} global tracks")
-    print(f"Total track length: {sum(t.length for t in global_tracks):.2f}m")
+    print(f"[Stage 1] Generated {len(global_tracks)} global tracks "
+          f"(total length={sum(t.length for t in global_tracks):.2f}m)")
 
     # ========== STAGE 2: DECOMPOSITION ==========
     print("\n" + "=" * 80)
@@ -135,32 +121,24 @@ def visualize_stage2_pipeline():
     print("=" * 80)
 
     try:
-        # IMPORTANT: Only Type D obstacles participate in decomposition
-        # Type B obstacles are already incorporated into inner_boundary (creating holes)
-        # Passing Type B again would double-count them!
-
-        # However, ALL physical obstacles (Type B + Type D) are used for track clustering
-        # because tracks must be subdivided to avoid crossing any physical obstacle
-        all_physical_obstacles = type_b_polygons + type_d_polygons
+        obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
 
         # Perform boustrophedon decomposition
         print("\nDecomposing field into preliminary blocks...")
-        print(f"  Type D obstacles for decomposition: {len(type_d_obstacles)}")
-        print(f"  Type B obstacles (already in inner boundary): {len(type_b_obstacles)}")
 
         # Debug: Show critical points
         from src.decomposition import find_critical_points
         critical_points = find_critical_points(
             field_headland.inner_boundary,
-            type_d_polygons,  # Only Type D obstacles!
+            obstacle_polygons,
             params.driving_direction
         )
         print(f"Critical points (sweep perpendicular to driving direction {params.driving_direction}°):")
         print(f"  {len(critical_points)} critical x-coordinates: {[f'{x:.1f}' for x in critical_points[:10]]}")
 
         preliminary_blocks = boustrophedon_decomposition(
-            inner_boundary=field_headland.inner_boundary,  # Already has Type B holes
-            obstacles=type_d_polygons,  # Only Type D obstacles for sweep line events
+            inner_boundary=field_headland.inner_boundary,
+            obstacles=obstacle_polygons,
             driving_direction_degrees=params.driving_direction,
         )
 
@@ -220,8 +198,7 @@ def visualize_stage2_pipeline():
         print(f"  - Blocks: {len(final_blocks)}")
 
         # Cluster global tracks into blocks (Section 2.3.2 of paper)
-        # Pass ALL physical obstacles (Type B + Type D) to enable subdivision at obstacle boundaries
-        final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_physical_obstacles)
+        final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks)
 
         # Get clustering statistics
         clustering_stats = get_track_clustering_statistics(final_blocks, global_tracks)
@@ -266,14 +243,9 @@ def visualize_stage2_pipeline():
             label="Inner boundary",
         )
 
-        # Obstacles - show all physical obstacles (Type B and Type D)
+        # Obstacles
         for obs in classified_obstacles:
-            if obs.obstacle_type.name == "B":
-                color = "orange"  # Type B - near boundary
-            elif obs.obstacle_type.name == "D":
-                color = "gray"    # Type D - standard
-            else:
-                color = "lightgray"  # Type A/C if present
+            color = "red" if obs.obstacle_type.name == "D" else "gray"
             plot_filled_polygon(ax1, obs.polygon, color=color, alpha=0.5)
             plot_polygon(ax1, obs.polygon, color="black", linewidth=1.5)
 
@@ -307,11 +279,9 @@ def visualize_stage2_pipeline():
                 fontweight="bold",
             )
 
-        # All physical obstacles (Type B and Type D)
-        for obs in type_b_obstacles:
-            plot_filled_polygon(ax2, obs.polygon, color="orange", alpha=0.7)
+        # Obstacles
         for obs in type_d_obstacles:
-            plot_filled_polygon(ax2, obs.polygon, color="gray", alpha=0.7)
+            plot_filled_polygon(ax2, obs.polygon, color="red", alpha=0.7)
 
         ax2.set_xlabel("X (m)")
         ax2.set_ylabel("Y (m)")
@@ -353,11 +323,9 @@ def visualize_stage2_pipeline():
                 bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
             )
 
-        # All physical obstacles (Type B and Type D)
-        for obs in type_b_obstacles:
-            plot_filled_polygon(ax3, obs.polygon, color="orange", alpha=0.6)
+        # Obstacles
         for obs in type_d_obstacles:
-            plot_filled_polygon(ax3, obs.polygon, color="gray", alpha=0.6)
+            plot_filled_polygon(ax3, obs.polygon, color="red", alpha=0.6)
 
         ax3.set_xlabel("X (m)")
         ax3.set_ylabel("Y (m)")

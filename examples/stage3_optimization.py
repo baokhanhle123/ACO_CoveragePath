@@ -13,11 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
-from src.decomposition import (
-    boustrophedon_decomposition,
-    cluster_tracks_into_blocks,
-    merge_blocks_by_criteria,
-)
+from src.decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
 from src.geometry import generate_field_headland, generate_parallel_tracks
 from src.obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
 from src.optimization import (
@@ -29,22 +25,15 @@ from src.optimization import (
 )
 
 
-def visualize_path(field, blocks, path_plan, classified_obstacles=None, title="ACO-Optimized Coverage Path"):
+def visualize_path(field, blocks, path_plan, title="ACO-Optimized Coverage Path"):
     """
     Visualize the complete coverage path.
 
     Shows:
     - Field boundary
-    - All physical obstacles (Type B and Type D)
-    - Blocks (colored, created around all obstacles)
+    - Obstacles
+    - Blocks (colored)
     - Optimized coverage path
-
-    Args:
-        field: Field object
-        blocks: List of blocks
-        path_plan: PathPlan object
-        classified_obstacles: List of classified obstacles (for labeling)
-        title: Plot title
     """
     fig, ax = plt.subplots(figsize=(14, 10))
 
@@ -52,33 +41,12 @@ def visualize_path(field, blocks, path_plan, classified_obstacles=None, title="A
     field_x, field_y = zip(*field.boundary_polygon.exterior.coords)
     ax.plot(field_x, field_y, "k-", linewidth=2, label="Field Boundary")
 
-    # Draw ALL physical obstacles (Type B and Type D)
-    # Both types are included in decomposition to ensure paths avoid them
-    if classified_obstacles:
-        from src.obstacles.classifier import get_type_b_obstacles, get_type_d_obstacles
-        type_b_obstacles = get_type_b_obstacles(classified_obstacles)
-        type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-
-        # Draw Type D obstacles (gray)
-        for i, obs in enumerate(type_d_obstacles):
-            obs_x, obs_y = zip(*obs.polygon.exterior.coords)
-            ax.fill(obs_x, obs_y, color="gray", alpha=0.5, edgecolor="black", linewidth=1.5)
-            if i == 0:
-                ax.plot([], [], "s", color="gray", alpha=0.5, label="Type D Obstacles")
-
-        # Draw Type B obstacles (orange - near boundary)
-        for i, obs in enumerate(type_b_obstacles):
-            obs_x, obs_y = zip(*obs.polygon.exterior.coords)
-            ax.fill(obs_x, obs_y, color="orange", alpha=0.5, edgecolor="black", linewidth=1.5)
-            if i == 0:
-                ax.plot([], [], "s", color="orange", alpha=0.5, label="Type B Obstacles")
-    else:
-        # Fallback: show all obstacles if classification not provided
-        for i, obs in enumerate(field.obstacle_polygons):
-            obs_x, obs_y = zip(*obs.exterior.coords)
-            ax.fill(obs_x, obs_y, color="gray", alpha=0.5, edgecolor="black", linewidth=1.5)
-            if i == 0:
-                ax.plot([], [], "s", color="gray", alpha=0.5, label="Obstacles")
+    # Draw obstacles
+    for i, obs in enumerate(field.obstacle_polygons):
+        obs_x, obs_y = zip(*obs.exterior.coords)
+        ax.fill(obs_x, obs_y, color="gray", alpha=0.5, edgecolor="black", linewidth=1.5)
+        if i == 0:
+            ax.plot([], [], "s", color="gray", alpha=0.5, label="Obstacles")
 
     # Draw blocks with different colors
     colors = plt.cm.Set3(np.linspace(0, 1, len(blocks)))
@@ -184,18 +152,22 @@ def visualize_convergence(solver, title="ACO Convergence"):
 
     # Add improvement annotation
     if len(best_costs) > 0:
-        initial_best = best_costs[0]
+        # Use the first finite positive best cost as the "initial" reference
+        finite_best_costs = [c for c in best_costs if np.isfinite(c) and c > 0]
         final_best = best_costs[-1]
-        improvement = ((initial_best - final_best) / initial_best) * 100
-        ax.text(
-            0.02,
-            0.98,
-            f"Improvement: {improvement:.1f}%\nInitial: {initial_best:.2f}\nFinal: {final_best:.2f}",
-            transform=ax.transAxes,
-            fontsize=10,
-            verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
-        )
+
+        if finite_best_costs and np.isfinite(final_best) and final_best > 0:
+            initial_best = finite_best_costs[0]
+            improvement = ((initial_best - final_best) / initial_best) * 100
+            ax.text(
+                0.02,
+                0.98,
+                f"Improvement: {improvement:.1f}%\nInitial: {initial_best:.2f}\nFinal: {final_best:.2f}",
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+            )
 
     plt.tight_layout()
     return fig
@@ -220,13 +192,18 @@ def print_summary(field, blocks, path_plan, solver):
     print("\n[ACO OPTIMIZATION]")
     best_costs, _ = solver.get_convergence_data()
     if best_costs:
-        initial_best = best_costs[0]
+        finite_best_costs = [c for c in best_costs if np.isfinite(c) and c > 0]
         final_best = best_costs[-1]
-        improvement = ((initial_best - final_best) / initial_best) * 100
-        print(f"  Initial best cost: {initial_best:.2f}")
-        print(f"  Final best cost: {final_best:.2f}")
-        print(f"  Improvement: {improvement:.1f}%")
-        print(f"  Iterations: {len(best_costs)}")
+
+        if finite_best_costs and np.isfinite(final_best) and final_best > 0:
+            initial_best = finite_best_costs[0]
+            improvement = ((initial_best - final_best) / initial_best) * 100
+            print(f"  Initial best cost: {initial_best:.2f}")
+            print(f"  Final best cost: {final_best:.2f}")
+            print(f"  Improvement: {improvement:.1f}%")
+            print(f"  Iterations: {len(best_costs)}")
+        else:
+            print("  Improvement: N/A (insufficient valid convergence data)")
 
     print("\n[PATH PLAN]")
     stats = get_path_statistics(path_plan)
@@ -241,9 +218,23 @@ def print_summary(field, blocks, path_plan, solver):
     print("\n" + "=" * 80)
 
 
-def run_demo():
-    """Run complete Stage 3 demonstration."""
+def run_demo(seed=None):
+    """
+    Run complete Stage 3 demonstration.
+
+    This corresponds to Stage 3 (ACO-based block sequence optimization) in
+    Zhou et al. 2014, "Agricultural operations planning in fields with
+    multiple obstacle areas" (Comput. Electron. Agric. 109, 12–22,
+    doi:10.1016/j.compag.2014.08.013), Section 2.4.
+
+    Args:
+        seed: Optional integer random seed for reproducible ACO runs.
+    """
     print("Starting Stage 3 Demo...")
+
+    # Optional reproducibility for debugging / experiments
+    if seed is not None:
+        np.random.seed(seed)
 
     # ====================
     # STAGE 1: Field Setup
@@ -289,11 +280,9 @@ def run_demo():
     type_b_obstacles = get_type_b_obstacles(classified_obstacles)
     type_b_polygons = [obs.polygon for obs in type_b_obstacles]
     type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-    type_d_polygons = [obs.polygon for obs in type_d_obstacles]
+    obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
 
     # Regenerate headland with Type B obstacles incorporated
-    # Type B obstacles are incorporated into inner boundary (creates holes in the boundary polygon)
-    # This prevents tracks from being generated between obstacle and field boundary
     field_headland = generate_field_headland(
         field_boundary=field.boundary_polygon,
         operating_width=params.operating_width,
@@ -301,35 +290,17 @@ def run_demo():
         type_b_obstacles=type_b_polygons,
     )
 
-    print(f"  ✓ Field created with {len(type_b_obstacles)} Type B obstacles (incorporated into boundary, creating holes)")
-    print(f"  ✓ {len(type_d_obstacles)} Type D obstacles (for boustrophedon decomposition)")
-    print(f"  ✓ All {len(type_b_obstacles) + len(type_d_obstacles)} physical obstacles must be avoided by paths")
-
-    # Generate global tracks (Stage 1 - ignoring obstacles)
-    print("\n[1.5/5] Generating global tracks (ignoring obstacles)...")
-    global_tracks = generate_parallel_tracks(
-        inner_boundary=field_headland.inner_boundary,
-        driving_direction_degrees=params.driving_direction,
-        operating_width=params.operating_width,
-    )
-    print(f"  ✓ Generated {len(global_tracks)} global tracks")
+    print(f"  ✓ Field created with {len(type_b_obstacles)} Type B obstacles (incorporated)")
+    print(f"  ✓ {len(type_d_obstacles)} Type D obstacles for decomposition")
 
     # ====================
     # STAGE 2: Decomposition
     # ====================
     print("\n[2/5] Running boustrophedon decomposition...")
 
-    # IMPORTANT: Only Type D obstacles participate in decomposition
-    # Type B obstacles are already incorporated into inner_boundary (creating holes)
-    # Passing Type B again would double-count them!
-
-    # However, ALL physical obstacles (Type B + Type D) are used for track clustering
-    # because tracks must be subdivided to avoid crossing any physical obstacle
-    all_physical_obstacles = type_b_polygons + type_d_polygons
-
     preliminary_blocks = boustrophedon_decomposition(
-        inner_boundary=field_headland.inner_boundary,  # Already has Type B holes
-        obstacles=type_d_polygons,  # Only Type D obstacles for sweep line events
+        inner_boundary=field_headland.inner_boundary,
+        obstacles=obstacle_polygons,
         driving_direction_degrees=params.driving_direction,
     )
 
@@ -337,13 +308,21 @@ def run_demo():
         blocks=preliminary_blocks, operating_width=params.operating_width
     )
 
-    # Cluster global tracks into blocks (Section 2.3.2)
-    # Pass ALL physical obstacles (Type B + Type D) to enable subdivision at obstacle boundaries
-    print(f"\n[2.5/5] Clustering {len(global_tracks)} global tracks into {len(final_blocks)} blocks...")
-    final_blocks = cluster_tracks_into_blocks(global_tracks, final_blocks, all_physical_obstacles)
+    # Generate tracks
+    # Pass Type B obstacles to ensure tracks avoid them (they still physically exist)
+    for block in final_blocks:
+        tracks = generate_parallel_tracks(
+            inner_boundary=block.polygon,
+            driving_direction_degrees=params.driving_direction,
+            operating_width=params.operating_width,
+            obstacles_to_avoid=type_b_polygons if type_b_polygons else None,
+        )
+        for i, track in enumerate(tracks):
+            track.block_id = block.block_id
+            track.index = i
+        block.tracks = tracks
 
-    total_track_segments = sum(len(block.tracks) for block in final_blocks)
-    print(f"  ✓ Created {total_track_segments} track segments across {len(final_blocks)} blocks")
+    print(f"  ✓ Created {len(final_blocks)} blocks")
 
     # ====================
     # STAGE 3: Entry/Exit Nodes
@@ -365,21 +344,30 @@ def run_demo():
     # ====================
     print("\n[4/5] Running ACO optimization...")
 
-    # Build cost matrix
+    # Build cost matrix (Section 2.4.1):
+    # - Within-block transitions use total working distance for the block
+    # - Between-block transitions use Euclidean distance between nodes
+    #   (turning_penalty is set to 0.0 in this demo for simplicity)
     cost_matrix = build_cost_matrix(
         blocks=final_blocks, nodes=all_nodes, turning_penalty=0.0
     )
 
-    # Create ACO solver with parameters from Zhou et al. 2014 (Section 2.4.2, page 18)
-    # Paper specifies: α=1, β=5, ρ=0.5, num_ants=n (number of nodes)
+    # Number of ants: the paper suggests using roughly one ant per node.
+    # We follow that recommendation but cap the count for demo runtime.
+    num_nodes = len(all_nodes)
+    num_ants = min(max(num_nodes, 10), 40)
+
+    # Create ACO solver with practically tuned parameters
+    # (Paper uses β=5.0 and ρ=0.5; here we use a slightly lower β and ρ
+    #  for smoother convergence in this interactive demo.)
     aco_params = ACOParameters(
-        alpha=1.0,      # Pheromone importance (paper: α=1)
-        beta=5.0,       # Heuristic importance (paper: β=5, NOT 2!)
-        rho=0.5,        # Evaporation rate (paper: ρ=0.5)
-        q=100.0,        # Pheromone deposit constant
-        num_ants=len(all_nodes),  # Paper: num_ants = n (number of nodes)
-        num_iterations=100,       # Sufficient for convergence
-        elitist_weight=2.0,       # Elitist strategy weight
+        alpha=1.0,
+        beta=2.0,
+        rho=0.1,
+        q=100.0,
+        num_ants=num_ants,
+        num_iterations=100,
+        elitist_weight=2.0,
     )
 
     solver = ACOSolver(
@@ -403,10 +391,7 @@ def run_demo():
     # ====================
     print("\n[5/5] Generating complete coverage path...")
 
-    path_plan = generate_path_from_solution(
-        best_solution, final_blocks, all_nodes,
-        obstacles=all_physical_obstacles  # Pass all physical obstacles (Type B + Type D)
-    )
+    path_plan = generate_path_from_solution(best_solution, final_blocks, all_nodes)
 
     print(f"  ✓ Generated path with {len(path_plan.segments)} segments")
 
@@ -418,7 +403,7 @@ def run_demo():
     # Create visualizations
     print("\nGenerating visualizations...")
 
-    fig1 = visualize_path(field, final_blocks, path_plan, classified_obstacles)
+    fig1 = visualize_path(field, final_blocks, path_plan)
     fig2 = visualize_convergence(solver)
 
     # Save figures to results/plots directory
@@ -432,7 +417,10 @@ def run_demo():
     print("  - results/plots/stage3_path.png")
     print("  - results/plots/stage3_convergence.png")
 
-    plt.show()
+    try:
+        plt.show()
+    except Exception:
+        print("  (Display not available - check saved files)")
 
     print("\nStage 3 Demo Complete!")
 

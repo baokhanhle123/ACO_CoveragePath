@@ -4,17 +4,20 @@ Field-work track generation for complete coverage.
 Implements parallel track generation from Zhou et al. 2014 (Section 2.2.3).
 """
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 
 from ..data.track import Track
 from .mbr import get_mbr_with_orientation
 
 
 def generate_parallel_tracks(
-    inner_boundary: Polygon, driving_direction_degrees: float, operating_width: float
+    inner_boundary: Polygon,
+    driving_direction_degrees: float,
+    operating_width: float,
+    obstacles_to_avoid: Optional[List[Polygon]] = None,
 ) -> List[Track]:
     """
     Generate parallel field-work tracks to cover the field body.
@@ -27,17 +30,46 @@ def generate_parallel_tracks(
     5. Generate parallel lines with spacing w
     6. Subdivide lines at boundary intersections
     7. Keep segments inside field, discard outside
+    8. Filter out segments that intersect obstacles (e.g., Type B obstacles)
 
     Args:
         inner_boundary: Inner boundary polygon of field body
         driving_direction_degrees: Driving direction angle (degrees)
         operating_width: Effective operating width (w)
+        obstacles_to_avoid: Optional list of obstacle polygons to exclude from tracks
+                          (e.g., Type B obstacles that still physically exist)
 
     Returns:
         List of Track objects covering the field
     """
+    # Step 0: Subtract obstacles from boundary if provided
+    # Type B obstacles are incorporated into inner boundary but still physically exist
+    # We need to ensure tracks don't cross them
+    working_boundary = inner_boundary
+    if obstacles_to_avoid:
+        for obstacle in obstacles_to_avoid:
+            try:
+                # Subtract obstacle from boundary
+                working_boundary = working_boundary.difference(obstacle)
+                # Handle MultiPolygon result
+                if isinstance(working_boundary, MultiPolygon):
+                    # For track generation, we need to handle all parts
+                    # Use union to combine all parts, or take largest if union fails
+                    try:
+                        # Try to get a single polygon by taking the largest piece
+                        # This works well when obstacles create holes
+                        working_boundary = max(working_boundary.geoms, key=lambda p: p.area)
+                    except Exception:
+                        # If that fails, try buffer(0) to clean up
+                        working_boundary = working_boundary.buffer(0)
+                        if isinstance(working_boundary, MultiPolygon):
+                            working_boundary = max(working_boundary.geoms, key=lambda p: p.area)
+            except Exception:
+                # If difference fails, continue with original boundary
+                pass
+    
     # Step 1: Get MBR aligned with driving direction
-    mbr = get_mbr_with_orientation(inner_boundary, driving_direction_degrees)
+    mbr = get_mbr_with_orientation(working_boundary, driving_direction_degrees)
 
     # Step 2: Create reference line parallel to driving direction
     # Place reference line at one vertex of MBR
@@ -68,7 +100,7 @@ def generate_parallel_tracks(
 
     # Step 5: Generate parallel line segments
     # Find field bounds to create long enough lines
-    field_bounds = inner_boundary.bounds  # (minx, miny, maxx, maxy)
+    field_bounds = working_boundary.bounds  # (minx, miny, maxx, maxy)
     field_diagonal = np.sqrt(
         (field_bounds[2] - field_bounds[0]) ** 2 + (field_bounds[3] - field_bounds[1]) ** 2
     )
@@ -93,8 +125,8 @@ def generate_parallel_tracks(
 
         line = LineString([line_start, line_end])
 
-        # Step 6: Find intersections with inner boundary
-        intersection = line.intersection(inner_boundary)
+        # Step 6: Find intersections with working boundary (obstacles already subtracted)
+        intersection = line.intersection(working_boundary)
 
         # Step 7: Extract line segments inside field
         segments = _extract_line_segments(intersection)

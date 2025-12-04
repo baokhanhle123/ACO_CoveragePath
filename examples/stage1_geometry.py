@@ -13,12 +13,7 @@ import numpy as np
 from shapely.geometry import Polygon
 
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
-from src.geometry import (
-    generate_field_headland,
-    generate_obstacle_headland,
-    generate_parallel_tracks,
-)
-from src.obstacles.classifier import classify_all_obstacles, get_type_b_obstacles, get_type_d_obstacles
+from src.stage1 import Stage1Result, run_stage1_pipeline
 
 
 def plot_polygon(ax, polygon, **kwargs):
@@ -38,7 +33,28 @@ def plot_filled_polygon(ax, polygon, **kwargs):
 
 
 def visualize_stage1_pipeline():
-    """Visualize complete Stage 1 pipeline."""
+    """
+    Visualize the complete Stage 1 pipeline.
+
+    This function is a faithful, didactic implementation of the first
+    stage described in Zhou et al. 2014, "Agricultural operations
+    planning in fields with multiple obstacle areas"
+    [`10.1016/j.compag.2014.08.013`], Section 2.2 ("First stage").
+    The three subplots roughly correspond to the geometric steps
+    illustrated in the figures of that section:
+        - field and obstacles,
+        - headlands and obstacle types,
+        - field body and parallel tracks.
+
+    1. Represent the field and obstacles as polygons.
+    2. Generate a preliminary field headland.
+    3. Classify obstacles into Types A–D.
+    4. Regenerate the field headland with Type B obstacles incorporated
+       into the inner boundary.
+    5. Generate obstacle headlands (for Type D obstacles).
+    6. Generate parallel field-work tracks on the field body, ignoring
+       in-field obstacles (handled in later stages).
+    """
 
     # Create field with multiple obstacles
     print("Creating field with obstacles...")
@@ -68,67 +84,26 @@ def visualize_stage1_pipeline():
         f"headland_passes={params.num_headland_passes}"
     )
 
-    # Generate field headland (preliminary, to classify obstacles)
-    print("\nGenerating preliminary field headland...")
-    preliminary_headland = generate_field_headland(
-        field_boundary=field.boundary_polygon,
-        operating_width=params.operating_width,
-        num_passes=params.num_headland_passes,
-    )
+    # Run the core Stage 1 pipeline (Section 2.2 of the paper)
+    print("\nRunning Stage 1 pipeline (Zhou et al. 2014, Sec. 2.2)...")
+    result: Stage1Result = run_stage1_pipeline(field, params)
 
-    # Classify obstacles
-    print("Classifying obstacles...")
-    classified_obstacles = classify_all_obstacles(
-        obstacle_boundaries=field.obstacles,
-        field_inner_boundary=preliminary_headland.inner_boundary,
-        driving_direction_degrees=params.driving_direction,
-        operating_width=params.operating_width,
-        threshold=params.obstacle_threshold,
-    )
-
-    print(f"Classified {len(classified_obstacles)} obstacles:")
-    for obs in classified_obstacles:
+    print(f"\nClassified {len(result.classified_obstacles)} obstacles:")
+    for obs in result.classified_obstacles:
         print(f"  - {obs}")
 
-    # Extract Type B obstacles
-    type_b_obstacles = get_type_b_obstacles(classified_obstacles)
-    type_b_polygons = [obs.polygon for obs in type_b_obstacles]
+    print(f"\nType B obstacles (incorporated into inner boundary): {len(result.type_b_obstacles)}")
+    print(f"Type D obstacles (including merged Type C clusters): {len(result.type_d_obstacles)}")
+    if result.type_c_clusters:
+        print("Type C proximity clusters (original obstacle indices):")
+        for cluster in result.type_c_clusters:
+            print(f"  - {cluster}")
+    else:
+        print("No Type C proximity clusters detected.")
+    print(f"Generated {len(result.obstacle_headlands)} obstacle headlands")
 
-    # Regenerate field headland with Type B obstacles incorporated
-    print(f"\nIncorporating {len(type_b_obstacles)} Type B obstacles into inner boundary...")
-    field_headland = generate_field_headland(
-        field_boundary=field.boundary_polygon,
-        operating_width=params.operating_width,
-        num_passes=params.num_headland_passes,
-        type_b_obstacles=type_b_polygons,
-    )
-
-    # Generate obstacle headlands
-    print("\nGenerating obstacle headlands...")
-    type_d_obstacles = get_type_d_obstacles(classified_obstacles)
-    obstacle_headlands = []
-
-    for obs in type_d_obstacles:
-        obs_headland = generate_obstacle_headland(
-            obstacle_boundary=obs.polygon,
-            operating_width=params.operating_width,
-            num_passes=params.num_headland_passes,
-        )
-        if obs_headland is not None:
-            obstacle_headlands.append((obs, obs_headland))
-
-    print(f"Generated {len(obstacle_headlands)} obstacle headlands")
-
-    # Generate tracks
-    print("\nGenerating field-work tracks...")
-    tracks = generate_parallel_tracks(
-        inner_boundary=field_headland.inner_boundary,
-        driving_direction_degrees=params.driving_direction,
-        operating_width=params.operating_width,
-    )
-
-    print(f"Generated {len(tracks)} tracks")
-    print(f"Total track length: {sum(t.length for t in tracks):.2f}m")
+    print(f"\nGenerated {len(result.tracks)} tracks")
+    print(f"Total track length: {sum(t.length for t in result.tracks):.2f}m")
 
     # Create visualization
     print("\nCreating visualization...")
@@ -175,8 +150,8 @@ def visualize_stage1_pipeline():
     )
 
     # Field headland passes
-    colors = plt.cm.Blues(np.linspace(0.4, 0.8, len(field_headland.passes)))
-    for i, pass_poly in enumerate(field_headland.passes):
+    colors = plt.cm.Blues(np.linspace(0.4, 0.8, len(result.field_headland.passes)))
+    for i, pass_poly in enumerate(result.field_headland.passes):
         plot_polygon(
             ax2,
             pass_poly,
@@ -189,22 +164,16 @@ def visualize_stage1_pipeline():
     # Inner boundary
     plot_polygon(
         ax2,
-        field_headland.inner_boundary,
+        result.field_headland.inner_boundary,
         color="red",
         linewidth=2,
         linestyle=":",
         label="Inner boundary",
     )
 
-    # Classified obstacles with headlands (color-coded by type)
-    for obs in classified_obstacles:
-        if obs.obstacle_type.name == "B":
-            color = "orange"  # Type B - near boundary
-        elif obs.obstacle_type.name == "D":
-            color = "gray"    # Type D - standard
-        else:
-            color = "lightgray"  # Type A/C if present
-        plot_filled_polygon(ax2, obs.polygon, color=color, alpha=0.4)
+    # Classified obstacles with headlands
+    for obs in result.classified_obstacles:
+        plot_filled_polygon(ax2, obs.polygon, color="gray", alpha=0.4)
         plot_polygon(ax2, obs.polygon, color="black", linewidth=1.5)
 
         # Label with type
@@ -221,7 +190,7 @@ def visualize_stage1_pipeline():
         )
 
     # Obstacle headlands (Type D only)
-    for obs, obs_headland in obstacle_headlands:
+    for obs, obs_headland in result.obstacle_headlands:
         for pass_poly in obs_headland.passes:
             plot_polygon(ax2, pass_poly, color="orange", linewidth=1.5, linestyle="--", alpha=0.7)
 
@@ -237,21 +206,17 @@ def visualize_stage1_pipeline():
 
     # Inner boundary
     plot_filled_polygon(
-        ax3, field_headland.inner_boundary, color="lightblue", alpha=0.2, label="Field body"
+        ax3, result.field_headland.inner_boundary, color="lightblue", alpha=0.2, label="Field body"
     )
-    plot_polygon(ax3, field_headland.inner_boundary, color="blue", linewidth=2)
+    plot_polygon(ax3, result.field_headland.inner_boundary, color="blue", linewidth=2)
 
-    # Show all physical obstacles (Type B and Type D)
-    # Type B are incorporated into inner boundary but still shown for clarity
-    for obs in type_b_obstacles:
-        plot_filled_polygon(ax3, obs.polygon, color="orange", alpha=0.6)
-        plot_polygon(ax3, obs.polygon, color="black", linewidth=1.5)
-    for obs in type_d_obstacles:
+    # Only show Type D obstacles (Type B are incorporated into inner boundary)
+    for obs in result.type_d_obstacles:
         plot_filled_polygon(ax3, obs.polygon, color="gray", alpha=0.6)
         plot_polygon(ax3, obs.polygon, color="black", linewidth=1.5)
 
     # Tracks
-    for track in tracks:
+    for track in result.tracks:
         ax3.plot(
             [track.start[0], track.end[0]],
             [track.start[1], track.end[1]],

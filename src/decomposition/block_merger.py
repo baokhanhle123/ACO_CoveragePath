@@ -1,10 +1,14 @@
 """
 Block merging for boustrophedon decomposition.
 
-Implements block merging algorithm from Zhou et al. 2014 (Section 2.3.2):
-- Merges adjacent preliminary blocks to reduce total number
-- Uses adjacency graph and greedy merging strategy
-- Prioritizes merging narrow blocks first
+Implements the block-merging part of the *second stage* in Zhou et al. 2014
+([`10.1016/j.compag.2014.08.013`](http://dx.doi.org/10.1016/j.compag.2014.08.013)),
+Section 2.3.2:
+
+- Builds an adjacency graph between preliminary blocks (boustrophedon cells)
+- Greedily merges adjacent blocks to reduce their total number
+- Prioritizes merging narrow blocks first, in line with the discussion in
+  Section 2.3.2 on eliminating narrow cells while preserving good geometry.
 
 The goal is to reduce the number of blocks while maintaining:
 1. Obstacle-free cells
@@ -105,7 +109,7 @@ def calculate_merge_cost(block1: Block, block2: Block) -> float:
         block2: Second block
 
     Returns:
-        Merge cost (lower is better), or float('inf') if merge violates constraints
+        Merge cost (lower is better)
     """
     # Merge the blocks to evaluate the result
     merged_poly = block1.polygon.union(block2.polygon)
@@ -118,14 +122,6 @@ def calculate_merge_cost(block1: Block, block2: Block) -> float:
     convex_hull = merged_poly.convex_hull
     convexity_ratio = merged_poly.area / convex_hull.area if convex_hull.area > 0 else 0
     convexity_cost = 1.0 - convexity_ratio  # 0 = perfectly convex, 1 = very concave
-
-    # CONSTRAINT: Reject highly concave merges that would create problematic shapes
-    # This prevents merging blocks where boustrophedon connections might cross obstacles
-    # Convexity ratio < 0.85 means the merged block is too concave (loses >15% to convex hull)
-    # This threshold is conservative to ensure safe boustrophedon traversal
-    MIN_CONVEXITY_RATIO = 0.85
-    if convexity_ratio < MIN_CONVEXITY_RATIO:
-        return float('inf')  # Reject this merge
 
     # Cost factor 2: Area imbalance
     # Prefer merging blocks of similar size

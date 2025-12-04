@@ -1,16 +1,18 @@
 """
 Track clustering for boustrophedon decomposition.
 
-Implements the track clustering algorithm from Zhou et al. 2014 (Section 2.3.2):
+Implements the “clustering tracks into blocks” step of Zhou et al. 2014
+([`10.1016/j.compag.2014.08.013`](http://dx.doi.org/10.1016/j.compag.2014.08.013)),
+Section 2.3.2:
+
 - Takes global tracks from Stage 1 (generated ignoring obstacles)
 - Subdivides tracks at block boundaries
-- Clusters track segments into appropriate blocks
+- Assigns each resulting segment to exactly one block.
 
-Reference:
-    Zhou, K., Jensen, A. L., Sørensen, C. G., Busato, P., & Bochtis, D. D. (2014).
-    Agricultural operations planning in fields with multiple obstacle areas.
-    Computers and Electronics in Agriculture, 109, 12-22.
-    Section 2.3.2: "Clustering tracks into blocks"
+This corresponds to the second-stage operation where the continuous
+Stage‑1 guidance lines are partitioned and associated with the block
+areas resulting from the boustrophedon decomposition, as described in
+the equations and figures in Section 2.3.2 of the paper.
 """
 
 from typing import List, Tuple
@@ -145,113 +147,14 @@ def is_track_inside_block(track: Track, block: Block, tolerance: float = 0.1) ->
     return block.polygon.buffer(tolerance).contains(midpoint)
 
 
-def subdivide_tracks_at_obstacles(
-    blocks: List[Block],
-    obstacle_polygons: List
-) -> List[Block]:
-    """
-    Further subdivide tracks within blocks based on block polygon shape.
-
-    This addresses the notch problem where tracks at different y-coordinates
-    have different x-extents due to obstacles intruding into the block.
-    Without this subdivision, boustrophedon connections can cross obstacles.
-
-    Strategy: For each track, find the intersection of the track line with the
-    block polygon boundary. If the track enters/exits the block polygon at points
-    other than its start/end, subdivide it there to ensure all track segments
-    respect the block's actual boundaries (including notches).
-
-    Args:
-        blocks: Blocks with initially clustered tracks
-        obstacle_polygons: List of Shapely polygons representing obstacles
-
-    Returns:
-        List of blocks with tracks subdivided at block boundary transitions
-    """
-    from shapely.ops import unary_union
-
-    if not obstacle_polygons:
-        return blocks
-
-    obstacles_union = unary_union(obstacle_polygons)
-
-    for block in blocks:
-        if not block.tracks:
-            continue
-
-        subdivided_tracks = []
-
-        for track in block.tracks:
-            track_line = LineString([track.start, track.end])
-
-            # Find where the track intersects with the block's internal boundaries
-            # (caused by obstacle notches)
-            # We do this by finding gaps in the track when intersected with the block polygon
-            track_within_block = track_line.intersection(block.polygon)
-
-            # If the intersection is a simple LineString, the track is fully within the block
-            if track_within_block.geom_type == 'LineString':
-                # Check if it crosses an obstacle
-                obs_intersection = track_line.intersection(obstacles_union)
-                if obs_intersection.is_empty or obs_intersection.geom_type == 'Point':
-                    # No obstacle crossing, keep track as is
-                    subdivided_tracks.append(track)
-                elif obs_intersection.geom_type in ['LineString', 'MultiLineString']:
-                    # Track crosses obstacle - need to remove this track
-                    # (it will be subdivided by the intersection with block polygon)
-                    if hasattr(obs_intersection, 'length') and obs_intersection.length < 0.01:
-                        # Just touching
-                        subdivided_tracks.append(track)
-                    # else: crosses obstacle, skip it
-                continue
-
-            # If intersection is MultiLineString, the track crosses in/out of the block
-            # (due to obstacle notches) - subdivide into segments
-            if track_within_block.geom_type == 'MultiLineString':
-                for segment_geom in track_within_block.geoms:
-                    if segment_geom.length < 0.01:  # Skip tiny segments
-                        continue
-
-                    coords = list(segment_geom.coords)
-                    if len(coords) >= 2:
-                        segment = Track(
-                            start=coords[0],
-                            end=coords[-1],
-                            index=track.index,
-                            block_id=track.block_id
-                        )
-
-                        # Double-check this segment doesn't cross obstacles
-                        segment_line = LineString([segment.start, segment.end])
-                        obs_check = segment_line.intersection(obstacles_union)
-
-                        if obs_check.is_empty or obs_check.geom_type == 'Point':
-                            subdivided_tracks.append(segment)
-                        elif obs_check.geom_type in ['LineString', 'MultiLineString']:
-                            if hasattr(obs_check, 'length') and obs_check.length < 0.01:
-                                subdivided_tracks.append(segment)
-                            # else: crosses obstacle, skip
-                continue
-
-            # For other geometry types (Point, empty), skip
-            if not track_within_block.is_empty and track_within_block.geom_type not in ['Point', 'MultiPoint']:
-                subdivided_tracks.append(track)
-
-        # Update block's tracks with subdivided version
-        block.tracks = subdivided_tracks
-
-    return blocks
-
-
 def cluster_tracks_into_blocks(
     global_tracks: List[Track],
-    blocks: List[Block],
-    obstacle_polygons: List = None
+    blocks: List[Block]
 ) -> List[Block]:
     """
     Cluster global tracks into blocks by subdivision and assignment.
 
-    Algorithm from paper (Section 2.3.2) with enhancement:
+    Algorithm from paper (Section 2.3.2):
     1. Input: Set T of global tracks (from Stage 1, ignoring obstacles)
     2. Input: Set B of block areas (from boustrophedon decomposition)
     3. For each track i ∈ T:
@@ -259,13 +162,10 @@ def cluster_tracks_into_blocks(
           - If track intersects block boundary, subdivide into segments
           - Check each segment: is it inside block j?
           - If yes, assign segment to block j's track set
-    4. [ENHANCEMENT] Further subdivide tracks at obstacle boundaries within blocks
-       to prevent inter-track connections from crossing obstacles
 
     Args:
         global_tracks: Tracks generated in Stage 1 (ignoring obstacles)
         blocks: Blocks from boustrophedon decomposition
-        obstacle_polygons: Optional list of obstacle polygons for within-block subdivision
 
     Returns:
         List of blocks with tracks assigned (modifies blocks in-place)
@@ -274,7 +174,6 @@ def cluster_tracks_into_blocks(
         - Original global tracks may be subdivided into multiple segments
         - Each segment is assigned to exactly one block
         - Segments keep their original track index for continuity
-        - Additional subdivision at obstacle boundaries prevents crossing issues
     """
     # Initialize each block's track list
     for block in blocks:
@@ -304,11 +203,6 @@ def cluster_tracks_into_blocks(
                         newly_unassigned.append(subseg)
 
             unassigned_segments = newly_unassigned
-
-    # ENHANCEMENT: Further subdivide tracks at obstacle boundaries within blocks
-    # This prevents boustrophedon connections from crossing obstacles
-    if obstacle_polygons:
-        blocks = subdivide_tracks_at_obstacles(blocks, obstacle_polygons)
 
     # Re-index tracks within each block for sequential ordering
     for block in blocks:
