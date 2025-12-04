@@ -309,11 +309,13 @@ def run_demo(seed=None):
     )
 
     # Generate tracks
+    # Pass Type B obstacles to ensure tracks avoid them (they still physically exist)
     for block in final_blocks:
         tracks = generate_parallel_tracks(
             inner_boundary=block.polygon,
             driving_direction_degrees=params.driving_direction,
             operating_width=params.operating_width,
+            obstacles_to_avoid=type_b_polygons if type_b_polygons else None,
         )
         for i, track in enumerate(tracks):
             track.block_id = block.block_id
