@@ -242,14 +242,14 @@ def run_demo(seed=None):
     print("\n[1/5] Creating field with obstacles...")
 
     field = create_field_with_rectangular_obstacles(
-        field_width=100,
-        field_height=80,
+        field_width=220,
+        field_height=220,
         obstacle_specs=[
-            (30, 30, 15, 12),  # Obstacle 1 (same as Stage 1 & 2)
-            (65, 50, 12, 15),  # Obstacle 2 (same as Stage 1 & 2)
-            (20, 10, 8, 8),    # Obstacle 3 (same as Stage 1 & 2)
+            (80, 65, 60, 20),  # Obstacle 1
+            (40, 120, 70, 20),  # Obstacle 2
+            (20, 10, 40, 20),  # Obstacle 3 (near boundary)
         ],
-        name="Stage 3 Demo Field",
+        name="Demo Field",
     )
 
     params = FieldParameters(

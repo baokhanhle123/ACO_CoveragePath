@@ -59,12 +59,12 @@ def visualize_stage1_pipeline():
     # Create field with multiple obstacles
     print("Creating field with obstacles...")
     field = create_field_with_rectangular_obstacles(
-        field_width=100,
-        field_height=80,
+        field_width=220,
+        field_height=220,
         obstacle_specs=[
-            (30, 30, 15, 12),  # Obstacle 1
-            (65, 50, 12, 15),  # Obstacle 2
-            (20, 10, 8, 8),  # Obstacle 3 (near boundary)
+            (80, 65, 60, 20),  # Obstacle 1
+            (40, 120, 70, 20),  # Obstacle 2
+            (20, 10, 40, 20),  # Obstacle 3 (near boundary)
         ],
         name="Demo Field",
     )
