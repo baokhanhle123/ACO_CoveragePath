@@ -164,7 +164,7 @@ All demonstration scripts are organized in the `examples/` directory. See `examp
 ```bash
 python examples/stage1_geometry.py
 ```
-**Output**: `results/plots/stage1_demo.png`
+**Output**: `exports/demos/plots/stage1_demo.png`
 
 Shows:
 - Field boundary and obstacles
@@ -178,7 +178,7 @@ Shows:
 ```bash
 python examples/stage2_decomposition.py
 ```
-**Output**: `results/plots/stage2_demo.png`
+**Output**: `exports/demos/plots/stage2_demo.png`
 
 Shows:
 - Field setup from Stage 1
@@ -196,8 +196,8 @@ MPLBACKEND=Agg python examples/stage3_optimization.py
 python examples/stage3_optimization.py
 ```
 **Output**:
-- `results/plots/stage3_path.png` - Optimized coverage path visualization
-- `results/plots/stage3_convergence.png` - ACO convergence plot
+- `exports/demos/plots/stage3_path.png` - Optimized coverage path visualization
+- `exports/demos/plots/stage3_convergence.png` - ACO convergence plot
 
 Shows:
 - Complete coverage path with color-coded working/transition segments
@@ -485,17 +485,16 @@ ACO_CoveragePath/
 │   ├── medium_field.json      # Medium field (80×70m, 5 obstacles)
 │   └── large_field.json       # Large field (100×80m, 7 obstacles)
 │
-├── exports/               # ✅ Dashboard export outputs
-│   ├── animations/            # GIF animations
-│   ├── reports/               # PDF reports
-│   ├── data/                  # CSV data files
-│   └── images/                # Static PNG images
-│
-├── results/               # ✅ Example script outputs
-│   ├── animations/            # Generated animations
-│   ├── plots/                 # Visualization images
-│   ├── paths/                 # Path data
-│   └── metrics/               # Performance metrics
+├── exports/               # ✅ All outputs (demos + dashboard)
+│   ├── demos/                 # Example demo outputs
+│   │   ├── animations/        # Demo animations
+│   │   └── plots/             # Demo plots
+│   ├── animations/            # Dashboard GIF animations
+│   ├── reports/               # Dashboard PDF reports
+│   ├── data/                  # Dashboard CSV data files
+│   ├── images/                # Dashboard static PNG images
+│   ├── metrics/               # Performance metrics
+│   └── paths/                 # Path data
 │
 ├── streamlit_app.py       # ✅ Main Streamlit dashboard application
 ├── README.md              # ✅ This file (project guide)

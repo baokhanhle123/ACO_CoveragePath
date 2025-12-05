@@ -406,16 +406,16 @@ def run_demo(seed=None):
     fig1 = visualize_path(field, final_blocks, path_plan)
     fig2 = visualize_convergence(solver)
 
-    # Save figures to results/plots directory
+    # Save figures to exports/demos/plots directory
     import os
-    os.makedirs("results/plots", exist_ok=True)
+    os.makedirs("exports/demos/plots", exist_ok=True)
 
-    fig1.savefig("results/plots/stage3_path.png", dpi=150, bbox_inches="tight")
-    fig2.savefig("results/plots/stage3_convergence.png", dpi=150, bbox_inches="tight")
+    fig1.savefig("exports/demos/plots/stage3_path.png", dpi=150, bbox_inches="tight")
+    fig2.savefig("exports/demos/plots/stage3_convergence.png", dpi=150, bbox_inches="tight")
 
     print("\n✓ Visualizations saved:")
-    print("  - results/plots/stage3_path.png")
-    print("  - results/plots/stage3_convergence.png")
+    print("  - exports/demos/plots/stage3_path.png")
+    print("  - exports/demos/plots/stage3_convergence.png")
 
     try:
         plt.show()

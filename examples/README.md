@@ -75,7 +75,7 @@ MPLBACKEND=Agg python examples/path_animation_only.py
 - Visualization of geometric preprocessing
 
 **Output**:
-- `results/plots/stage1_demo.png`
+- `exports/demos/plots/stage1_demo.png`
 
 **Run**:
 ```bash
@@ -97,7 +97,7 @@ python examples/stage1_geometry.py
 - Adjacency graph construction
 
 **Output**:
-- `results/plots/stage2_demo.png`
+- `exports/demos/plots/stage2_demo.png`
 - Console output with block statistics
 
 **Run**:
@@ -119,9 +119,9 @@ python examples/stage2_decomposition.py
 - ACO algorithm execution
 - Convergence analysis
 
-**Output**:
-- `results/plots/stage3_path.png`
-- `results/plots/stage3_convergence.png`
+**Outputs**:
+- `exports/demos/plots/stage3_path.png`
+- `exports/demos/plots/stage3_convergence.png`
 - Console statistics
 
 **Run**:

@@ -699,9 +699,9 @@ def main():
     # Determine save path
     save_path = args.save
     if save_path is None:
-        # Default: save to results/animations/
-        os.makedirs("results/animations", exist_ok=True)
-        save_path = "results/animations/path_animation.gif"
+        # Default: save to exports/demos/animations/
+        os.makedirs("exports/demos/animations", exist_ok=True)
+        save_path = "exports/demos/animations/path_animation.gif"
 
     # Create animation
     anim = animator.create_animation(

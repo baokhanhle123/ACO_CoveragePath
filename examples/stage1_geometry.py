@@ -237,7 +237,7 @@ def visualize_stage1_pipeline():
     plt.tight_layout()
 
     # Save figure
-    output_path = "results/plots/stage1_demo.png"
+    output_path = "exports/demos/plots/stage1_demo.png"
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     print(f"\n✓ Visualization saved to: {output_path}")
 
