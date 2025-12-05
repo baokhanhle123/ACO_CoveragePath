@@ -27,7 +27,8 @@ def build_block_adjacency_graph(blocks: List[Block]) -> BlockGraph:
     """
     Build adjacency graph for preliminary blocks.
 
-    Two blocks are adjacent if they share a common edge.
+    Two blocks are adjacent if they share a common edge that is exclusively shared
+    (not shared with any other block), as specified in the paper.
 
     Args:
         blocks: List of preliminary blocks from decomposition
@@ -38,8 +39,8 @@ def build_block_adjacency_graph(blocks: List[Block]) -> BlockGraph:
     Algorithm:
         1. Create BlockGraph with all blocks
         2. For each pair of blocks:
-           a. Check if boundaries share an edge (not just touch at point)
-           b. Add edge if adjacent
+           a. Check if boundaries share an exclusive edge (not just touch at point)
+           b. Add edge if adjacent with exclusive edge
     """
     # Create empty graph
     graph = BlockGraph()
@@ -48,10 +49,10 @@ def build_block_adjacency_graph(blocks: List[Block]) -> BlockGraph:
     for block in blocks:
         graph.add_block(block)
 
-    # Check all pairs for adjacency
+    # Check all pairs for adjacency with exclusive edges
     for i in range(len(blocks)):
         for j in range(i + 1, len(blocks)):
-            if check_blocks_adjacent(blocks[i], blocks[j]):
+            if check_blocks_have_exclusive_edge(blocks[i], blocks[j], blocks):
                 graph.add_edge(blocks[i].block_id, blocks[j].block_id)
 
     return graph
@@ -91,6 +92,127 @@ def check_blocks_adjacent(block1: Block, block2: Block, threshold: float = 0.01)
     # else: Point or other geometry type → not adjacent
 
     return total_length > threshold
+
+
+def check_blocks_have_exclusive_edge(
+    block1: Block, block2: Block, all_blocks: List[Block], threshold: float = 0.01
+) -> bool:
+    """
+    Check if two blocks share a common edge that is exclusively shared (not shared with any other block).
+
+    According to the paper, "The merging requirement is that two connected blocks in the graph
+    have a common edge." The common edge must be shared exclusively by the two blocks.
+
+    Args:
+        block1: First block
+        block2: Second block
+        all_blocks: List of all blocks (to check for exclusivity)
+        threshold: Minimum shared boundary length to consider adjacent
+
+    Returns:
+        True if blocks share an exclusive common edge (not shared with any other block)
+    """
+    # First check if blocks are adjacent at all
+    if not check_blocks_adjacent(block1, block2, threshold):
+        return False
+
+    # Get polygon boundaries as LineStrings
+    boundary1 = block1.polygon.exterior
+    boundary2 = block2.polygon.exterior
+
+    # Get intersection (shared edge segments)
+    intersection = boundary1.intersection(boundary2)
+
+    if intersection.is_empty:
+        return False
+
+    # Extract shared edge segments
+    shared_segments = []
+    if isinstance(intersection, LineString):
+        shared_segments = [intersection]
+    elif isinstance(intersection, MultiLineString):
+        shared_segments = list(intersection.geoms)
+    else:
+        # Point or other geometry type → not a valid edge
+        return False
+
+    # Check each shared segment to ensure it's not shared with any other block
+    for shared_segment in shared_segments:
+        # Check if this segment is also shared with any other block
+        for other_block in all_blocks:
+            # Skip the two blocks we're checking
+            if other_block.block_id == block1.block_id or other_block.block_id == block2.block_id:
+                continue
+
+            # Check if other block also intersects with this shared segment
+            other_boundary = other_block.polygon.exterior
+            other_intersection = other_boundary.intersection(shared_segment)
+
+            # If other block also shares this segment (or part of it), it's not exclusive
+            if not other_intersection.is_empty:
+                # Check if the intersection has meaningful length (not just a point)
+                if isinstance(other_intersection, LineString):
+                    if other_intersection.length > threshold:
+                        return False  # Segment is shared with another block
+                elif isinstance(other_intersection, MultiLineString):
+                    total_other_length = sum(line.length for line in other_intersection.geoms)
+                    if total_other_length > threshold:
+                        return False  # Segment is shared with another block
+                elif hasattr(other_intersection, 'length') and other_intersection.length > threshold:
+                    return False  # Segment is shared with another block
+
+            # Also check if other block shares an edge with block2 on the same "side"
+            # This handles cases where one block's edge is split into multiple segments
+            # shared by different blocks (e.g., B7's left edge shared by both B4 and B5)
+            # If block2 shares edges with both block1 and other_block, and those edges
+            # are on the same side of block2, then block1 and block2 don't have an exclusive edge
+            other_shared_with_block2 = block2.polygon.exterior.intersection(other_boundary)
+            if not other_shared_with_block2.is_empty:
+                # Check if the shared segments are on the same side of block2
+                # by checking if they're collinear or adjacent
+                other_segments = []
+                if isinstance(other_shared_with_block2, LineString):
+                    other_segments = [other_shared_with_block2]
+                elif isinstance(other_shared_with_block2, MultiLineString):
+                    other_segments = list(other_shared_with_block2.geoms)
+                
+                for other_seg in other_segments:
+                    if other_seg.length > threshold:
+                        # Check if this segment is collinear or adjacent to shared_segment
+                        # Two segments are on the same edge if they're collinear and close
+                        # or if they share an endpoint
+                        other_coords = list(other_seg.coords)
+                        shared_coords = list(shared_segment.coords)
+                        if other_coords and shared_coords:
+                            # Check if segments share an endpoint (adjacent)
+                            if (other_coords[0] == shared_coords[-1] or 
+                                other_coords[-1] == shared_coords[0] or
+                                other_coords[0] == shared_coords[0] or
+                                other_coords[-1] == shared_coords[-1]):
+                                # Segments are adjacent - same edge, not exclusive
+                                return False
+                            # Check if segments are collinear (same line, different parts)
+                            # Simple heuristic: if both are vertical/horizontal and on same coordinate
+                            if (len(other_coords) >= 2 and len(shared_coords) >= 2):
+                                # Check if both segments are on the same vertical or horizontal line
+                                other_is_vertical = abs(other_coords[0][0] - other_coords[-1][0]) < 1e-6
+                                other_is_horizontal = abs(other_coords[0][1] - other_coords[-1][1]) < 1e-6
+                                shared_is_vertical = abs(shared_coords[0][0] - shared_coords[-1][0]) < 1e-6
+                                shared_is_horizontal = abs(shared_coords[0][1] - shared_coords[-1][1]) < 1e-6
+                                
+                                if other_is_vertical and shared_is_vertical:
+                                    # Both vertical - check if same x coordinate
+                                    if abs(other_coords[0][0] - shared_coords[0][0]) < 1e-6:
+                                        # Same vertical line - not exclusive
+                                        return False
+                                elif other_is_horizontal and shared_is_horizontal:
+                                    # Both horizontal - check if same y coordinate
+                                    if abs(other_coords[0][1] - shared_coords[0][1]) < 1e-6:
+                                        # Same horizontal line - not exclusive
+                                        return False
+
+    # All shared segments are exclusive to block1 and block2
+    return True
 
 
 def calculate_merge_cost(block1: Block, block2: Block) -> float:
@@ -191,6 +313,10 @@ def greedy_block_merging(
     """
     Perform greedy block merging to reduce total number of blocks.
 
+    Two-phase strategy:
+    Phase 1: Merge small blocks (area < min_block_area) to eliminate narrow cells
+    Phase 2: Merge any adjacent blocks (regardless of size) to reduce total count
+
     Strategy from paper:
     1. Start with smallest/narrowest blocks
     2. Merge with best adjacent neighbor
@@ -206,8 +332,8 @@ def greedy_block_merging(
         Updated BlockGraph with merged blocks
 
     Termination conditions:
-    - All blocks meet minimum area requirement
-    - No adjacent blocks can be merged without violating constraints
+    - Phase 1: All blocks meet minimum area requirement
+    - Phase 2: No adjacent blocks remain to merge
     """
     if min_block_area is None:
         min_block_area = 0  # No minimum constraint
@@ -218,7 +344,7 @@ def greedy_block_merging(
     while iteration < max_iterations:
         iteration += 1
 
-        # Find smallest block below threshold
+        # Phase 1: Find smallest block below threshold
         smallest_block = None
         smallest_area = float('inf')
 
@@ -230,23 +356,27 @@ def greedy_block_merging(
                     smallest_block = block
                     smallest_area = block.area
 
-        # If no small blocks found, try to merge any adjacent blocks
-        # to further reduce total count (optional aggressive merging)
+        # Phase 2: If no small blocks found, merge any adjacent blocks
+        # to further reduce total count (prioritize smaller blocks first)
         if smallest_block is None:
-            # Stop - all blocks meet criteria
-            break
+            # Find smallest block (any size) that has adjacent neighbors
+            for block in block_graph.blocks:
+                neighbors = block_graph.get_adjacent_blocks(block.block_id)
+                if neighbors and block.area < smallest_area:
+                    smallest_block = block
+                    smallest_area = block.area
+
+            # If no blocks with neighbors found, stop merging
+            if smallest_block is None:
+                break
 
         # Get adjacent blocks
         neighbor_ids = block_graph.get_adjacent_blocks(smallest_block.block_id)
 
         if not neighbor_ids:
             # No neighbors to merge with, skip this block
-            # Remove it from graph to avoid infinite loop
-            block_graph.blocks = [
-                b for b in block_graph.blocks if b.block_id != smallest_block.block_id
-            ]
-            if smallest_block.block_id in block_graph.adjacency:
-                del block_graph.adjacency[smallest_block.block_id]
+            # Keep it in the graph (it will remain in final result) but skip merging
+            # This can happen if all its neighbors were already merged
             continue
 
         # Find best neighbor to merge with (lowest cost)
@@ -306,12 +436,16 @@ def greedy_block_merging(
         # Add new block to adjacency
         block_graph.adjacency[new_block_id] = []
 
-        # Re-check adjacency with all old neighbors
+        # Re-check adjacency with all old neighbors using exclusive edge check
+        # Need to pass all remaining blocks to check exclusivity
+        remaining_blocks = block_graph.blocks
         for neighbor_id in old_neighbors:
             if neighbor_id == smallest_block.block_id or neighbor_id == best_neighbor.block_id:
                 continue
             neighbor_block = block_graph.get_block_by_id(neighbor_id)
-            if neighbor_block and check_blocks_adjacent(merged_block, neighbor_block):
+            if neighbor_block and check_blocks_have_exclusive_edge(
+                merged_block, neighbor_block, remaining_blocks
+            ):
                 block_graph.add_edge(new_block_id, neighbor_id)
 
     return block_graph
