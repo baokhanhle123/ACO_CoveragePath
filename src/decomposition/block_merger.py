@@ -243,6 +243,12 @@ def calculate_merge_cost(block1: Block, block2: Block) -> float:
     # Lower convexity ratio = more complex shape = higher cost
     convex_hull = merged_poly.convex_hull
     convexity_ratio = merged_poly.area / convex_hull.area if convex_hull.area > 0 else 0
+    
+    # Strict constraint: reject non-convex merges
+    # Non-convex shapes are undesirable for coverage path planning
+    if convexity_ratio < 0.99:
+        return float('inf')  # Reject merge that creates non-convex shape
+    
     convexity_cost = 1.0 - convexity_ratio  # 0 = perfectly convex, 1 = very concave
 
     # Cost factor 2: Area imbalance
@@ -340,6 +346,7 @@ def greedy_block_merging(
 
     max_iterations = 1000  # Safety limit
     iteration = 0
+    blocks_with_no_valid_merges = set()  # Track blocks that have no valid merges
 
     while iteration < max_iterations:
         iteration += 1
@@ -349,6 +356,9 @@ def greedy_block_merging(
         smallest_area = float('inf')
 
         for block in block_graph.blocks:
+            # Skip blocks that we know have no valid merges
+            if block.block_id in blocks_with_no_valid_merges:
+                continue
             if block.area < min_block_area and block.area < smallest_area:
                 # Check if it has neighbors to merge with
                 neighbors = block_graph.get_adjacent_blocks(block.block_id)
@@ -361,6 +371,9 @@ def greedy_block_merging(
         if smallest_block is None:
             # Find smallest block (any size) that has adjacent neighbors
             for block in block_graph.blocks:
+                # Skip blocks that we know have no valid merges
+                if block.block_id in blocks_with_no_valid_merges:
+                    continue
                 neighbors = block_graph.get_adjacent_blocks(block.block_id)
                 if neighbors and block.area < smallest_area:
                     smallest_block = block
@@ -389,12 +402,18 @@ def greedy_block_merging(
                 continue
 
             cost = calculate_merge_cost(smallest_block, neighbor)
+            # Skip merges with infinite cost (rejected due to constraints)
+            if cost == float('inf'):
+                continue
             if cost < best_cost:
                 best_cost = cost
                 best_neighbor = neighbor
 
         if best_neighbor is None:
-            break
+            # No valid merges found (all rejected due to constraints)
+            # Mark this block as having no valid merges and skip it
+            blocks_with_no_valid_merges.add(smallest_block.block_id)
+            continue
 
         # Merge the two blocks (keep the smaller ID to maintain numbering continuity)
         new_block_id = min(smallest_block.block_id, best_neighbor.block_id)
