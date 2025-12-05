@@ -241,7 +241,7 @@ def run_demo(seed=None):
     # ====================
     print("\n[1/5] Creating field with obstacles...")
 
-    field = create_field_with_rectangular_obstacles(
+    field = create_field_with_rectangular_obstacles( 
         field_width=220,
         field_height=220,
         obstacle_specs=[
