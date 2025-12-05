@@ -315,6 +315,9 @@ pytest tests/test_solution_verification.py -v
 
 **Purpose**: Prepare field geometry and generate coverage tracks
 
+**Implementation**: Entry point `run_stage1_pipeline()` in `src/stage1.py`
+**Modules**: `src/data/` (data structures), `src/geometry/` (geometric operations), `src/obstacles/` (obstacle classification)
+
 **Key Operations**:
 
 1. **Headland Generation**
@@ -342,6 +345,8 @@ pytest tests/test_solution_verification.py -v
 ### Stage 2: Boustrophedon Decomposition
 
 **Purpose**: Divide field into simple obstacle-free regions
+
+**Modules**: `src/data/` (Block data structure), `src/decomposition/` (decomposition & merging algorithms)
 
 **Key Operations**:
 
@@ -371,6 +376,8 @@ pytest tests/test_solution_verification.py -v
 ### Stage 3: ACO-based Path Optimization
 
 **Purpose**: Find optimal order to visit all blocks
+
+**Modules**: `src/data/` (BlockNode), `src/optimization/` (ACO algorithm, cost matrix, path generation)
 
 **Key Operations**:
 
@@ -441,21 +448,15 @@ elitist_weight = 2.0 # Extra pheromone for best solution
 ```
 ACO_CoveragePath/
 ├── src/                   # ✅ Source code
-│   ├── data/              # Data structures (Field, Block, Track, Node)
-│   ├── geometry/          # Geometric operations (headland, tracks, MBR)
-│   ├── obstacles/         # Obstacle classification system
-│   ├── decomposition/     # Boustrophedon decomposition & merging
-│   ├── optimization/      # ACO algorithm & path generation
-│   │   ├── cost_matrix.py      # Cost calculation between nodes
-│   │   ├── aco.py              # Ant Colony Optimization solver
-│   │   └── path_generation.py  # Path construction from solution
-│   ├── visualization/     # Path & pheromone animations
-│   │   ├── path_animation.py   # PathAnimator for GIF generation
-│   │   └── pheromone_animation.py  # PheromoneAnimator
-│   └── dashboard/         # Interactive Streamlit dashboard
-│       ├── config_manager.py   # Scenario configuration management
-│       ├── export_utils.py     # PDF/CSV/PNG export utilities
-│       └── quick_demo.py       # Quick Demo tab implementation
+│   ├── stage1.py          # Stage 1 entry point & pipeline
+│   ├── data/              # Data structures (Field, Block, Track, Node, Obstacle)
+│   ├── geometry/          # Stage 1: Geometric operations (headland, MBR, tracks)
+│   ├── obstacles/         # Stage 1: Obstacle classification (A/B/C/D types)
+│   ├── decomposition/     # Stage 2: Boustrophedon decomposition & merging
+│   ├── optimization/      # Stage 3: ACO algorithm & path generation
+│   ├── visualization/     # Visualization utilities
+│   ├── dashboard/         # Interactive Streamlit dashboard components
+│   └── utils/             # General utilities
 │
 ├── tests/                 # ✅ Comprehensive test suite (92 tests)
 │   ├── test_basic_functionality.py      # 7 tests
@@ -477,8 +478,9 @@ ACO_CoveragePath/
 │   └── complete_visualization.py # Both animations + full stats
 │
 ├── scripts/               # ✅ Internal scripts
-│   ├── benchmarks/            # Performance testing
-│   └── validation/            # Internal validation tests
+│   └── benchmarks/            # Performance benchmarking utilities
+│
+├── paper/                 # ✅ Research paper materials
 │
 ├── scenarios/             # ✅ Pre-configured demonstration scenarios
 │   ├── small_field.json       # Small field (60×50m, 3 obstacles)
@@ -518,6 +520,10 @@ from src.optimization import (
     ACOParameters, ACOSolver, build_cost_matrix,
     generate_path_from_solution, get_path_statistics
 )
+
+# Note: For Stage 1, you can also use the pipeline entry point:
+# from src.stage1 import run_stage1_pipeline
+# stage1_result = run_stage1_pipeline(field, params)
 
 # 1. Create field
 field = create_field_with_rectangular_obstacles(

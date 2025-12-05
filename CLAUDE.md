@@ -122,7 +122,8 @@ INPUT: Field boundary + Obstacles + Parameters
    ↓
 ┌──────────────────────────────────────────┐
 │ STAGE 1: Field Representation           │
-│ src/geometry/, src/obstacles/           │
+│ src/stage1.py, src/data/, src/geometry/ │
+│ src/obstacles/                           │
 │ • Generate headlands (buffer zones)     │
 │ • Classify obstacles (A/B/C/D types)    │
 │ • Generate parallel tracks (MBR)        │
@@ -131,7 +132,7 @@ INPUT: Field boundary + Obstacles + Parameters
    ↓
 ┌──────────────────────────────────────────┐
 │ STAGE 2: Boustrophedon Decomposition    │
-│ src/decomposition/                       │
+│ src/data/, src/decomposition/           │
 │ • Find critical points (sweep line)     │
 │ • Extract obstacle-free cells           │
 │ • Merge adjacent blocks                 │
@@ -141,7 +142,7 @@ INPUT: Field boundary + Obstacles + Parameters
    ↓
 ┌──────────────────────────────────────────┐
 │ STAGE 3: ACO Path Optimization           │
-│ src/optimization/                        │
+│ src/data/, src/optimization/            │
 │ • Create 4 nodes per block              │
 │ • Build cost matrix (working/trans)     │
 │ • Run ACO to find optimal sequence      │
@@ -152,13 +153,16 @@ INPUT: Field boundary + Obstacles + Parameters
 
 ### Stage Details
 
-**Stage 1: Field Geometric Representation** (`src/geometry/`, `src/obstacles/`)
+**Stage 1: Field Geometric Representation** (`src/stage1.py`, `src/data/`, `src/geometry/`, `src/obstacles/`)
+- **Entry point**: `run_stage1_pipeline()` in `src/stage1.py`
+- **Data structures**: Field, Obstacle, Track defined in `src/data/`
 - **Headlands**: Buffer zones via `generate_field_headland()` → inner boundary
 - **Obstacle classification**: A (tiny, ignore), B (boundary, merge), C (close, merge), D (standard, decompose)
 - **Tracks**: Parallel lines via MBR (rotating calipers) → optimal orientation
 - **Critical**: Only Type D obstacles proceed to Stage 2
 
-**Stage 2: Boustrophedon Decomposition** (`src/decomposition/`)
+**Stage 2: Boustrophedon Decomposition** (`src/data/`, `src/decomposition/`)
+- **Data structures**: Block, BlockGraph defined in `src/data/`
 - **Critical points**: Sweep perpendicular to driving direction, find topology changes
 - **Coordinate rotation**: Rotate by `-driving_direction` (make East=0°), then rotate back
 - **Cell extraction**: Vertical slices → obstacle-free blocks
@@ -166,7 +170,8 @@ INPUT: Field boundary + Obstacles + Parameters
 - **Track clustering**: Subdivide global tracks from Stage 1 and assign to blocks (Section 2.3.2)
 - **Critical**: Must rotate geometry back; only merge adjacent blocks
 
-**Stage 3: ACO Path Optimization** (`src/optimization/`)
+**Stage 3: ACO Path Optimization** (`src/data/`, `src/optimization/`)
+- **Data structures**: BlockNode, Solution, PathPlan defined in `src/data/` and `src/optimization/`
 - **Nodes**: Each block → 4 nodes (first_start, first_end, last_start, last_end)
 - **Cost matrix**: Working distance (same block) vs transition distance (different blocks)
 - **Entry/exit parity**: Invalid transitions (e.g., first_start → last_start) have cost=∞
