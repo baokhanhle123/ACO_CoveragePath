@@ -78,33 +78,38 @@ def visualize_path(field, blocks, path_plan, title="ACO-Optimized Coverage Path"
         path_x, path_y = zip(*all_waypoints)
 
         # Draw path with different styles for working vs transition
-        prev_type = None
-        segment_start = 0
+        # Track which labels have been added to prevent duplicates
+        labels_added = set()
 
         for i, segment in enumerate(path_plan.segments):
             segment_waypoints = segment.waypoints
             seg_x, seg_y = zip(*segment_waypoints)
 
             if segment.segment_type == "working":
+                # Only add label if not already in legend
+                label = "Working Path" if "working" not in labels_added else ""
+                if label:
+                    labels_added.add("working")
                 ax.plot(
                     seg_x,
                     seg_y,
                     "b-",
                     linewidth=2.5,
                     alpha=0.8,
-                    label="Working Path" if prev_type != "working" else "",
+                    label=label,
                 )
             else:  # transition
+                label = "Transition" if "transition" not in labels_added else ""
+                if label:
+                    labels_added.add("transition")
                 ax.plot(
                     seg_x,
                     seg_y,
                     "r--",
                     linewidth=2,
                     alpha=0.6,
-                    label="Transition" if prev_type != "transition" else "",
+                    label=label,
                 )
-
-            prev_type = segment.segment_type
 
         # Mark start and end
         ax.plot(
