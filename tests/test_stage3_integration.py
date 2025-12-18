@@ -100,11 +100,20 @@ def test_full_stage3_pipeline():
     print("\n[STAGE 3] Entry/Exit Node Generation")
     print("-" * 80)
 
-    # Create entry/exit nodes for all blocks
+    # Filter out blocks with no tracks (too narrow to traverse)
+    # After corrected sweep direction, some blocks may be too narrow perpendicular to driving direction
+    traversable_blocks = [b for b in final_blocks if len(b.tracks) > 0]
+    print(f" Traversable blocks (with tracks): {len(traversable_blocks)}/{len(final_blocks)}")
+
+    # Renumber blocks to be consecutive (required for ACO solver)
+    for new_id, block in enumerate(traversable_blocks):
+        block.block_id = new_id
+
+    # Create entry/exit nodes for traversable blocks only
     all_nodes = []
     node_index = 0
 
-    for block in final_blocks:
+    for block in traversable_blocks:
         nodes = block.create_entry_exit_nodes(start_index=node_index)
         all_nodes.extend(nodes)
         node_index += 4
@@ -117,7 +126,9 @@ def test_full_stage3_pipeline():
     print("\n[STAGE 3] Cost Matrix Construction")
     print("-" * 80)
 
-    cost_matrix = build_cost_matrix(blocks=final_blocks, nodes=all_nodes, turning_penalty=0.0)
+    # Build cost matrix with traversable blocks
+    # Note: we pass traversable_blocks here, and the nodes have been renumbered to match
+    cost_matrix = build_cost_matrix(blocks=traversable_blocks, nodes=all_nodes, turning_penalty=0.0)
 
     print(f" Cost matrix built: {cost_matrix.shape}")
     print(f"  - Matrix size: {cost_matrix.shape[0]} x {cost_matrix.shape[1]}")
@@ -145,12 +156,13 @@ def test_full_stage3_pipeline():
         elitist_weight=2.0,
     )
 
+    # Pass traversable blocks to ACO solver
     solver = ACOSolver(
-        blocks=final_blocks, nodes=all_nodes, cost_matrix=cost_matrix, params=aco_params
+        blocks=traversable_blocks, nodes=all_nodes, cost_matrix=cost_matrix, params=aco_params
     )
 
     print(f" ACO Solver initialized")
-    print(f"  - Blocks: {len(final_blocks)}")
+    print(f"  - Blocks: {len(traversable_blocks)}")
     print(f"  - Nodes: {len(all_nodes)}")
     print(f"  - Ants: {aco_params.num_ants}")
     print(f"  - Iterations: {aco_params.num_iterations}")
@@ -172,8 +184,8 @@ def test_full_stage3_pipeline():
         print(f"  - Block sequence: {best_solution.block_sequence}")
         print(f"  - Blocks visited: {len(set(best_solution.block_sequence))}")
 
-        # Verify solution validity
-        assert best_solution.is_valid(len(final_blocks)), "Solution is not valid!"
+        # Verify solution validity (against traversable blocks only)
+        assert best_solution.is_valid(len(traversable_blocks)), "Solution is not valid!"
         assert len(best_solution.path) > 0, "Solution path is empty!"
         assert best_solution.cost > 0, "Solution cost must be positive!"
 

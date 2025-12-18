@@ -41,10 +41,12 @@ class TestCriticalPoints:
 
         critical_points = find_critical_points(field, obstacles, driving_direction_degrees=0.0)
 
-        # Should have 2 critical points (left and right boundaries)
+        # Should have 2 critical points (bottom and top boundaries for Y-sweep)
+        # With driving_direction=0° (East), slices are horizontal, sweep vertically
+        # Critical points are Y-coordinates: Y=0 (bottom), Y=80 (top)
         assert len(critical_points) == 2
         assert np.isclose(critical_points[0], 0.0)
-        assert np.isclose(critical_points[1], 100.0)
+        assert np.isclose(critical_points[1], 80.0)
 
     def test_single_obstacle(self):
         """Test critical points with one rectangular obstacle."""
@@ -54,15 +56,15 @@ class TestCriticalPoints:
 
         critical_points = find_critical_points(field, obstacles, driving_direction_degrees=0.0)
 
-        # Should have field boundaries + obstacle boundaries
-        # Field: x=0, x=100
-        # Obstacle: x=30, x=50
-        # Total: 4 critical points
+        # Should have field boundaries + obstacle boundaries (Y-coordinates)
+        # Field: y=0, y=80
+        # Obstacle: y=30, y=50
+        # Total: 4 critical Y-coordinates
         assert len(critical_points) == 4
         assert 0.0 in critical_points
         assert 30.0 in critical_points
         assert 50.0 in critical_points
-        assert 100.0 in critical_points
+        assert 80.0 in critical_points
 
 
 class TestBoustrophedonDecomposition:
