@@ -128,7 +128,14 @@ def test_full_stage3_pipeline():
 
     # Build cost matrix with traversable blocks
     # Note: we pass traversable_blocks here, and the nodes have been renumbered to match
-    cost_matrix = build_cost_matrix(blocks=traversable_blocks, nodes=all_nodes, turning_penalty=0.0)
+    # Using default distance penalty parameters (distance_penalty_factor=1.5, distance_threshold=50.0)
+    cost_matrix = build_cost_matrix(
+        blocks=traversable_blocks,
+        nodes=all_nodes,
+        turning_penalty=0.0,
+        distance_penalty_factor=1.5,
+        distance_threshold=50.0,
+    )
 
     print(f" Cost matrix built: {cost_matrix.shape}")
     print(f"  - Matrix size: {cost_matrix.shape[0]} x {cost_matrix.shape[1]}")

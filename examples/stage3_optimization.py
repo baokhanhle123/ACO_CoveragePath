@@ -352,9 +352,16 @@ def run_demo(seed=None):
     # Build cost matrix (Section 2.4.1):
     # - Within-block transitions use total working distance for the block
     # - Between-block transitions use Euclidean distance between nodes
-    #   (turning_penalty is set to 0.0 in this demo for simplicity)
+    #   with distance-based penalty to prefer nearby nodes (Figures 12, 14)
+    # - turning_penalty is set to 0.0 in this demo for simplicity
+    # - distance_penalty_factor controls how strongly we penalize long transitions
+    # - distance_threshold is the reference distance for penalty normalization
     cost_matrix = build_cost_matrix(
-        blocks=final_blocks, nodes=all_nodes, turning_penalty=0.0
+        blocks=final_blocks,
+        nodes=all_nodes,
+        turning_penalty=0.0,
+        distance_penalty_factor=1.5,  # Moderate penalty for long transitions
+        distance_threshold=50.0,  # 50m reference distance
     )
 
     # Number of ants: the paper suggests using roughly one ant per node.
