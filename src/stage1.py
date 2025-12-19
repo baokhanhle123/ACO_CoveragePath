@@ -157,14 +157,15 @@ def run_stage1_pipeline(field: Field, params: FieldParameters) -> Stage1Result:
     # ------------------------------------------------------------------
     # Step 6: Generate parallel tracks on the field body.
     #
-    # IMPORTANT: As in the paper's Stage 1, in-field obstacles are
-    # ignored here – only the inner boundary of the (final) headland
-    # is used. Obstacles are handled in decomposition (Stage 2).
+    # Type B obstacles are incorporated into the inner boundary but still
+    # physically exist. Tracks must avoid these areas.
+    # Type D obstacles are handled in Stage 2 decomposition.
     # ------------------------------------------------------------------
     tracks = generate_parallel_tracks(
         inner_boundary=field_headland.inner_boundary,
         driving_direction_degrees=params.driving_direction,
         operating_width=params.operating_width,
+        obstacles_to_avoid=type_b_polygons if type_b_polygons else None,
     )
 
     return Stage1Result(

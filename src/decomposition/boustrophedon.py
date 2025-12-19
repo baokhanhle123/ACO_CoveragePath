@@ -139,36 +139,33 @@ def compute_slice_polygons(
     if slice_region.is_empty:
         return []
 
-    # Ensure we have a Polygon (not MultiPolygon from intersection)
+    # Handle MultiPolygon from Type B holes in inner_boundary
+    # Keep ALL pieces - Type B holes can split slices into multiple regions
     if isinstance(slice_region, MultiPolygon):
-        # Take the largest part if multiple
-        slice_region = max(slice_region.geoms, key=lambda p: p.area)
-
-    # Subtract all obstacles that intersect this slice
-    result = slice_region
-    for obstacle in obstacles:
-        if result.is_empty:
-            break
-        if obstacle.intersects(slice_region):
-            result = result.difference(obstacle)
-
-    # Handle empty result
-    if result.is_empty:
-        return []
-
-    # Handle MultiPolygon results (obstacles split the slice)
-    if isinstance(result, MultiPolygon):
-        # Return all non-empty polygons
-        polygons = [p for p in result.geoms if not p.is_empty and p.area > 1e-6]
-    elif isinstance(result, Polygon):
-        polygons = [result] if result.area > 1e-6 else []
+        slice_pieces = [p for p in slice_region.geoms if not p.is_empty and p.area > 1e-6]
     else:
-        # Handle other geometry types (shouldn't happen, but be safe)
-        polygons = []
+        slice_pieces = [slice_region] if not slice_region.is_empty else []
 
-    # Clean up invalid geometries
+    # Subtract Type D obstacles from EACH piece independently
+    all_results = []
+    for piece in slice_pieces:
+        result = piece
+        for obstacle in obstacles:
+            if result.is_empty:
+                break
+            if obstacle.intersects(piece):
+                result = result.difference(obstacle)
+
+        if not result.is_empty:
+            # Handle MultiPolygon from obstacle subtraction
+            if isinstance(result, MultiPolygon):
+                all_results.extend([p for p in result.geoms if not p.is_empty and p.area > 1e-6])
+            elif isinstance(result, Polygon) and result.area > 1e-6:
+                all_results.append(result)
+
+    # Clean up invalid geometries (same as before)
     cleaned_polygons = []
-    for poly in polygons:
+    for poly in all_results:
         if not poly.is_valid:
             poly = poly.buffer(0)  # Fix invalid geometry
         if poly.is_valid and not poly.is_empty and poly.area > 1e-6:
@@ -276,6 +273,15 @@ def boustrophedon_decomposition(
         # Create Block
         block = Block(block_id=block_id, boundary=boundary_coords)
         blocks.append(block)
+
+    # 8. Subdivide non-convex blocks (Type B obstacle holes)
+    from .convex_subdivision import subdivide_all_non_convex_blocks
+
+    blocks = subdivide_all_non_convex_blocks(
+        blocks=blocks,
+        driving_direction_degrees=driving_direction_degrees,
+        inner_boundary=inner_boundary,
+    )
 
     return blocks
 

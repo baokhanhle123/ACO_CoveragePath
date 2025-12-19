@@ -374,6 +374,66 @@ class TestStage1Pipeline:
         merged_count = sum(1 for obs in classified_obstacles if obs.is_merged())
         print(f"Merged obstacles: {merged_count}")
 
+    def test_tracks_avoid_type_b_obstacles(self):
+        """Test that generated tracks avoid Type B obstacle areas."""
+        from shapely.geometry import LineString, Polygon
+
+        from src.obstacles.classifier import get_type_b_obstacles
+        from src.stage1 import run_stage1_pipeline
+
+        # Create field with Type B obstacle (boundary-touching)
+        field_boundary = Polygon([(0, 0), (100, 0), (100, 80), (0, 80)])
+
+        # Create Type B obstacle that will touch inner boundary after headland
+        # Headland is 2 passes × 5m = 10m inward, so inner boundary is at (10, 10) to (90, 70)
+        # Create obstacle that touches left inner boundary
+        type_b_obstacle = Polygon([
+            (10, 20),  # Touches inner boundary at x=10
+            (30, 20),
+            (30, 40),
+            (10, 40),
+        ])
+
+        # Create field with obstacles
+        from src.data.field import Field
+
+        field = Field(
+            name="Field with Type B",
+            boundary=list(field_boundary.exterior.coords[:-1]),
+            obstacles=[list(type_b_obstacle.exterior.coords[:-1])],
+        )
+
+        # Parameters
+        params = FieldParameters(
+            operating_width=5.0,
+            turning_radius=6.0,
+            num_headland_passes=2,
+            driving_direction=0.0,
+            obstacle_threshold=3.0,
+        )
+
+        # Run Stage 1
+        result = run_stage1_pipeline(field, params)
+
+        print(f"\nType B track avoidance test:")
+        print(f"  Type B obstacles: {len(result.type_b_obstacles)}")
+        print(f"  Total tracks: {len(result.tracks)}")
+
+        # Verify tracks don't CROSS Type B obstacles (touching edges is OK)
+        for type_b_obs in result.type_b_obstacles:
+            crossing_tracks = []
+            for track in result.tracks:
+                track_line = LineString([track.start, track.end])
+                # Check if track crosses obstacle interior (not just touches boundary)
+                if track_line.crosses(type_b_obs.polygon) or type_b_obs.polygon.contains(track_line):
+                    crossing_tracks.append(track.index)
+
+            print(f"  Tracks crossing Type B obstacle {type_b_obs.index}: {len(crossing_tracks)}")
+
+            assert (
+                len(crossing_tracks) == 0
+            ), f"Found {len(crossing_tracks)} tracks crossing Type B obstacle {type_b_obs.index}"
+
 
 def test_stage1_complete_pipeline():
     """
