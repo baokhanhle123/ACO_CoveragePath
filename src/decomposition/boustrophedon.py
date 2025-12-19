@@ -17,7 +17,9 @@ from Stage 1) and Type D obstacles into a set of obstacle-free blocks
 prior to block merging and track clustering.
 """
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+import json
+import os
 
 import numpy as np
 from shapely import affinity
@@ -25,11 +27,16 @@ from shapely.geometry import LineString, MultiPolygon, Polygon
 
 from ..data.block import Block
 
+# #region agent log
+LOG_PATH = "/home/khanhle/ACO_CoveragePath/.cursor/debug.log"
+# #endregion
+
 
 def find_critical_points(
     inner_boundary: Polygon,
     obstacles: List[Polygon],
     driving_direction_degrees: float,
+    type_b_obstacles: Optional[List[Polygon]] = None,
 ) -> List[float]:
     """
     Find critical points along the sweep direction.
@@ -37,16 +44,19 @@ def find_critical_points(
     Critical points occur where:
     - Obstacle vertices align with sweep line (connectivity changes)
     - Sweep line enters/exits obstacle regions
+    - Type B obstacle vertices (even if incorporated into inner boundary)
 
     Algorithm:
     1. Rotate field and obstacles to align driving direction horizontally (East)
     2. Project all obstacle vertices onto sweep axis (perpendicular to driving dir)
-    3. Sort and deduplicate critical y-coordinates
+    3. Include Type B obstacle vertices (they still create connectivity changes)
+    4. Sort and deduplicate critical y-coordinates
 
     Args:
         inner_boundary: Field inner boundary polygon
-        obstacles: List of obstacle polygons
+        obstacles: List of Type D obstacle polygons
         driving_direction_degrees: Driving direction angle
+        type_b_obstacles: Optional list of Type B obstacle polygons (for critical points)
 
     Returns:
         Sorted list of critical y-coordinates in rotated coordinate system
@@ -62,6 +72,28 @@ def find_critical_points(
     # Rotate obstacles
     rotated_obstacles = [rotate_geometry(obs, rotation_angle) for obs in obstacles]
 
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "boustrophedon.py:find_critical_points:entry",
+                "message": "Finding critical points",
+                "data": {
+                    "num_obstacles": len(obstacles),
+                    "num_type_b_obstacles": len(type_b_obstacles) if type_b_obstacles else 0,
+                    "inner_boundary_num_interiors": len(inner_boundary.interiors),
+                    "inner_boundary_bounds": list(inner_boundary.bounds),
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # Collect critical y-coordinates (sweep is perpendicular to driving direction)
     critical_y = []
 
@@ -70,14 +102,99 @@ def find_critical_points(
     critical_y.append(bounds[1])  # Bottom boundary
     critical_y.append(bounds[3])  # Top boundary
 
-    # Add all obstacle vertex y-coordinates
+    # Add all Type D obstacle vertex y-coordinates
     for obs in rotated_obstacles:
         coords = list(obs.exterior.coords[:-1])  # Exclude duplicate last point
         for x, y in coords:
             critical_y.append(y)
 
+    # FIX: Add Type B obstacle vertex y-coordinates
+    # Type B obstacles are incorporated into inner boundary but still create
+    # connectivity changes at their boundaries (top/bottom edges)
+    type_b_vertices_y = []
+    if type_b_obstacles:
+        rotated_type_b = [rotate_geometry(obs, rotation_angle) for obs in type_b_obstacles]
+        for obs in rotated_type_b:
+            coords = list(obs.exterior.coords[:-1])  # Exclude duplicate last point
+            for x, y in coords:
+                type_b_vertices_y.append(y)
+                critical_y.append(y)
+
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "boustrophedon.py:find_critical_points:after_type_b",
+                "message": "Critical Y after adding Type B obstacle vertices",
+                "data": {
+                    "type_b_vertices_y": [float(y) for y in type_b_vertices_y],
+                    "critical_y_after_type_b": [float(y) for y in critical_y],
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
+    # #region agent log
+    # HYPOTHESIS A: Missing Type B hole vertices from inner_boundary.interiors
+    hole_vertices_y = []
+    for interior in rotated_boundary.interiors:
+        coords = list(interior.coords[:-1])  # Exclude duplicate last point
+        for x, y in coords:
+            hole_vertices_y.append(y)
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "boustrophedon.py:find_critical_points:before_hole_vertices",
+                "message": "Critical Y before adding Type B hole vertices",
+                "data": {
+                    "critical_y_before_holes": [float(y) for y in critical_y],
+                    "num_interiors": len(rotated_boundary.interiors),
+                    "hole_vertices_y_found": [float(y) for y in hole_vertices_y],
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
+    # Also add Type B hole vertices from inner_boundary.interiors (if any)
+    for interior in rotated_boundary.interiors:
+        coords = list(interior.coords[:-1])  # Exclude duplicate last point
+        for x, y in coords:
+            critical_y.append(y)
+
     # Sort and remove duplicates (with small tolerance for floating point)
     critical_y = sorted(set(np.round(critical_y, decimals=6)))
+
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "boustrophedon.py:find_critical_points:exit",
+                "message": "Final critical Y coordinates",
+                "data": {
+                    "final_critical_y": [float(y) for y in critical_y],
+                    "num_critical_points": len(critical_y),
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
     return critical_y
 
@@ -106,6 +223,7 @@ def compute_slice_polygons(
     y_top: float,
     x_min: float,
     x_max: float,
+    type_b_obstacles: Optional[List[Polygon]] = None,
 ) -> List[Polygon]:
     """
     Compute obstacle-free polygons in a horizontal slice.
@@ -115,11 +233,12 @@ def compute_slice_polygons(
 
     Args:
         inner_boundary: Field inner boundary
-        obstacles: List of obstacles
+        obstacles: List of Type D obstacles
         y_bottom: Bottom boundary of slice
         y_top: Top boundary of slice
         x_min: Left boundary
         x_max: Right boundary
+        type_b_obstacles: Optional list of Type B obstacles (still physically exist)
 
     Returns:
         List of obstacle-free polygon cells in this slice
@@ -146,6 +265,30 @@ def compute_slice_polygons(
     else:
         slice_pieces = [slice_region] if not slice_region.is_empty else []
 
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "boustrophedon.py:compute_slice_polygons:after_intersection",
+                "message": "Slice region after intersection with inner_boundary",
+                "data": {
+                    "y_bottom": float(y_bottom),
+                    "y_top": float(y_top),
+                    "slice_region_type": type(slice_region).__name__,
+                    "num_slice_pieces": len(slice_pieces),
+                    "slice_piece_areas": [float(p.area) for p in slice_pieces],
+                    "slice_piece_bounds": [[float(b) for b in p.bounds] for p in slice_pieces],
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # Subtract Type D obstacles from EACH piece independently
     all_results = []
     for piece in slice_pieces:
@@ -156,12 +299,43 @@ def compute_slice_polygons(
             if obstacle.intersects(piece):
                 result = result.difference(obstacle)
 
+        # Also subtract Type B obstacles (they still physically exist)
+        if type_b_obstacles:
+            for type_b_obs in type_b_obstacles:
+                if result.is_empty:
+                    break
+                if type_b_obs.intersects(piece):
+                    result = result.difference(type_b_obs)
+
         if not result.is_empty:
             # Handle MultiPolygon from obstacle subtraction
             if isinstance(result, MultiPolygon):
                 all_results.extend([p for p in result.geoms if not p.is_empty and p.area > 1e-6])
             elif isinstance(result, Polygon) and result.area > 1e-6:
                 all_results.append(result)
+
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "boustrophedon.py:compute_slice_polygons:after_obstacle_subtraction",
+                "message": "Results after subtracting Type D obstacles",
+                "data": {
+                    "y_bottom": float(y_bottom),
+                    "y_top": float(y_top),
+                    "num_results": len(all_results),
+                    "result_areas": [float(p.area) for p in all_results],
+                    "result_bounds": [[float(b) for b in p.bounds] for p in all_results],
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
     # Clean up invalid geometries (same as before)
     cleaned_polygons = []
@@ -170,6 +344,29 @@ def compute_slice_polygons(
             poly = poly.buffer(0)  # Fix invalid geometry
         if poly.is_valid and not poly.is_empty and poly.area > 1e-6:
             cleaned_polygons.append(poly)
+
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "E",
+                "location": "boustrophedon.py:compute_slice_polygons:exit",
+                "message": "Final cleaned polygons",
+                "data": {
+                    "y_bottom": float(y_bottom),
+                    "y_top": float(y_top),
+                    "num_cleaned": len(cleaned_polygons),
+                    "cleaned_areas": [float(p.area) for p in cleaned_polygons],
+                    "cleaned_bounds": [[float(b) for b in p.bounds] for p in cleaned_polygons],
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
     return cleaned_polygons
 
@@ -195,6 +392,7 @@ def boustrophedon_decomposition(
     inner_boundary: Polygon,
     obstacles: List[Polygon],
     driving_direction_degrees: float,
+    type_b_obstacles: Optional[List[Polygon]] = None,
 ) -> List[Block]:
     """
     Perform boustrophedon cellular decomposition.
@@ -210,6 +408,7 @@ def boustrophedon_decomposition(
         inner_boundary: Field inner boundary (after headland)
         obstacles: List of Type D obstacle polygons requiring decomposition
         driving_direction_degrees: Driving direction angle (0° = East, 90° = North)
+        type_b_obstacles: Optional list of Type B obstacle polygons (for critical points)
 
     Returns:
         List of preliminary Block objects (before merging)
@@ -218,6 +417,8 @@ def boustrophedon_decomposition(
         - Blocks at this stage may be very narrow
         - Block merging (next step) will combine adjacent blocks
         - Each block should be obstacle-free and convex
+        - Type B obstacles are incorporated into inner boundary but still create
+          connectivity changes that require critical points
     """
     # 1. Validate inputs
     if inner_boundary.is_empty or not inner_boundary.is_valid:
@@ -233,7 +434,10 @@ def boustrophedon_decomposition(
     x_min, x_max = bounds[0], bounds[2]
 
     # 4. Find critical points (Y-coordinates for horizontal slices)
-    critical_points = find_critical_points(inner_boundary, obstacles, driving_direction_degrees)
+    # Include Type B obstacles to capture connectivity changes at their boundaries
+    critical_points = find_critical_points(
+        inner_boundary, obstacles, driving_direction_degrees, type_b_obstacles=type_b_obstacles
+    )
 
     if len(critical_points) < 2:
         # Field too small or degenerate
@@ -250,10 +454,61 @@ def boustrophedon_decomposition(
         if abs(y_top - y_bottom) < 1e-6:
             continue
 
+        # #region agent log
+        try:
+            with open(LOG_PATH, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "boustrophedon.py:boustrophedon_decomposition:slice",
+                    "message": "Creating slice",
+                    "data": {
+                        "slice_index": i,
+                        "y_bottom": float(y_bottom),
+                        "y_top": float(y_top),
+                        "slice_height": float(y_top - y_bottom),
+                    },
+                    "timestamp": int(os.times().elapsed * 1000),
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
+
         # Compute obstacle-free cells in this horizontal slice
-        slice_polygons = compute_slice_polygons(
-            rotated_boundary, rotated_obstacles, y_bottom, y_top, x_min, x_max
+        rotated_type_b = (
+            [rotate_geometry(obs, rotation_angle) for obs in type_b_obstacles]
+            if type_b_obstacles
+            else None
         )
+        slice_polygons = compute_slice_polygons(
+            rotated_boundary, rotated_obstacles, y_bottom, y_top, x_min, x_max, rotated_type_b
+        )
+
+        # #region agent log
+        try:
+            with open(LOG_PATH, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "boustrophedon.py:boustrophedon_decomposition:slice_result",
+                    "message": "Slice polygons created",
+                    "data": {
+                        "slice_index": i,
+                        "y_bottom": float(y_bottom),
+                        "y_top": float(y_top),
+                        "num_polygons": len(slice_polygons),
+                        "polygon_areas": [float(p.area) for p in slice_polygons],
+                        "polygon_bounds": [[float(b) for b in p.bounds] for p in slice_polygons],
+                    },
+                    "timestamp": int(os.times().elapsed * 1000),
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
 
         # Add to results
         block_polygons_rotated.extend(slice_polygons)
@@ -274,6 +529,27 @@ def boustrophedon_decomposition(
         block = Block(block_id=block_id, boundary=boundary_coords)
         blocks.append(block)
 
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "D",
+                "location": "boustrophedon.py:boustrophedon_decomposition:before_subdivision",
+                "message": "Blocks before convex subdivision",
+                "data": {
+                    "num_blocks": len(blocks),
+                    "block_areas": [float(b.area) for b in blocks],
+                    "block_bounds": [[float(bnd) for bnd in b.polygon.bounds] for b in blocks],
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
     # 8. Subdivide non-convex blocks (Type B obstacle holes)
     from .convex_subdivision import subdivide_all_non_convex_blocks
 
@@ -282,6 +558,27 @@ def boustrophedon_decomposition(
         driving_direction_degrees=driving_direction_degrees,
         inner_boundary=inner_boundary,
     )
+
+    # #region agent log
+    try:
+        with open(LOG_PATH, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "D",
+                "location": "boustrophedon.py:boustrophedon_decomposition:after_subdivision",
+                "message": "Blocks after convex subdivision",
+                "data": {
+                    "num_blocks": len(blocks),
+                    "block_areas": [float(b.area) for b in blocks],
+                    "block_bounds": [[float(bnd) for bnd in b.polygon.bounds] for b in blocks],
+                },
+                "timestamp": int(os.times().elapsed * 1000),
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
     return blocks
 

@@ -117,6 +117,7 @@ def run_full_pipeline(seed: Optional[int] = None):
         inner_boundary=field_headland.inner_boundary,
         obstacles=obstacle_polygons,
         driving_direction_degrees=params.driving_direction,
+        type_b_obstacles=type_b_polygons,
     )
 
     final_blocks = merge_blocks_by_criteria(
