@@ -78,33 +78,38 @@ def visualize_path(field, blocks, path_plan, title="ACO-Optimized Coverage Path"
         path_x, path_y = zip(*all_waypoints)
 
         # Draw path with different styles for working vs transition
-        prev_type = None
-        segment_start = 0
+        # Track which labels have been added to prevent duplicates
+        labels_added = set()
 
         for i, segment in enumerate(path_plan.segments):
             segment_waypoints = segment.waypoints
             seg_x, seg_y = zip(*segment_waypoints)
 
             if segment.segment_type == "working":
+                # Only add label if not already in legend
+                label = "Working Path" if "working" not in labels_added else ""
+                if label:
+                    labels_added.add("working")
                 ax.plot(
                     seg_x,
                     seg_y,
                     "b-",
                     linewidth=2.5,
                     alpha=0.8,
-                    label="Working Path" if prev_type != "working" else "",
+                    label=label,
                 )
             else:  # transition
+                label = "Transition" if "transition" not in labels_added else ""
+                if label:
+                    labels_added.add("transition")
                 ax.plot(
                     seg_x,
                     seg_y,
                     "r--",
                     linewidth=2,
                     alpha=0.6,
-                    label="Transition" if prev_type != "transition" else "",
+                    label=label,
                 )
-
-            prev_type = segment.segment_type
 
         # Mark start and end
         ax.plot(
@@ -299,6 +304,7 @@ def run_demo(seed=None):
         inner_boundary=field_headland.inner_boundary,
         obstacles=obstacle_polygons,
         driving_direction_degrees=params.driving_direction,
+        type_b_obstacles=type_b_polygons,
     )
 
     final_blocks = merge_blocks_by_criteria(
@@ -344,9 +350,16 @@ def run_demo(seed=None):
     # Build cost matrix (Section 2.4.1):
     # - Within-block transitions use total working distance for the block
     # - Between-block transitions use Euclidean distance between nodes
-    #   (turning_penalty is set to 0.0 in this demo for simplicity)
+    #   with distance-based penalty to prefer nearby nodes (Figures 12, 14)
+    # - turning_penalty is set to 0.0 in this demo for simplicity
+    # - distance_penalty_factor controls how strongly we penalize long transitions
+    # - distance_threshold is the reference distance for penalty normalization
     cost_matrix = build_cost_matrix(
-        blocks=final_blocks, nodes=all_nodes, turning_penalty=0.0
+        blocks=final_blocks,
+        nodes=all_nodes,
+        turning_penalty=0.0,
+        distance_penalty_factor=1.5,  # Moderate penalty for long transitions
+        distance_threshold=50.0,  # 50m reference distance
     )
 
     # Number of ants: the paper suggests using roughly one ant per node.

@@ -137,6 +137,7 @@ def visualize_stage2_pipeline():
             inner_boundary=field_headland.inner_boundary,
             obstacles=obstacle_polygons,
             driving_direction_degrees=params.driving_direction,
+            type_b_obstacles=[obs.polygon for obs in stage1.type_b_obstacles],
         )
 
         print(f"\nCreated {len(preliminary_blocks)} preliminary blocks")

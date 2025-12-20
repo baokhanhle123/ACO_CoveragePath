@@ -130,7 +130,11 @@ def get_within_block_cost(block: Block, node1: BlockNode, node2: BlockNode) -> f
 
 
 def build_cost_matrix(
-    blocks: List[Block], nodes: List[BlockNode], turning_penalty: float = 0.0
+    blocks: List[Block],
+    nodes: List[BlockNode],
+    turning_penalty: float = 0.0,
+    distance_penalty_factor: float = 1.5,
+    distance_threshold: float = 50.0,
 ) -> np.ndarray:
     """
     Build complete cost matrix for TSP problem.
@@ -141,11 +145,16 @@ def build_cost_matrix(
         * Valid transitions: working distance
         * Invalid transitions: very large cost (INVALID_COST)
     - Between-block costs: Euclidean distance + optional turning penalty
+        * NEW: Distance-based penalty to prefer nearby nodes (Figures 12, 14)
 
     Args:
         blocks: List of all blocks
         nodes: List of all entry/exit nodes (4 per block)
         turning_penalty: Optional penalty for turns between blocks (default 0)
+        distance_penalty_factor: Exponent for distance penalty (default 1.5)
+            Higher values more strongly penalize long transitions
+        distance_threshold: Reference distance for penalty normalization (default 50m)
+            Deviations from minimum distance are normalized by this value
 
     Returns:
         Cost matrix of shape (num_nodes, num_nodes)
@@ -153,9 +162,36 @@ def build_cost_matrix(
     Note:
         The cost matrix represents the heuristic values for ACO.
         Invalid transitions have cost = INVALID_COST to prevent selection.
+
+        Distance penalty encourages transitions between nearby nodes:
+        - penalty_multiplier = 1 + (deviation / threshold) ^ penalty_factor
+        - deviation = actual_distance - min_distance_between_blocks
+        - Minimum-distance transitions get minimal penalty (multiplier ≈ 1.0)
+        - Long transitions get heavy penalty (multiplier >> 1.0)
     """
     n = len(nodes)
+    num_blocks = len(blocks)
     cost_matrix = np.zeros((n, n))
+
+    # Pre-compute minimum distances between all block pairs
+    # This encourages ACO to use nearest nodes when transitioning between blocks
+    min_block_distances = np.full((num_blocks, num_blocks), float('inf'))
+
+    for i in range(num_blocks):
+        for j in range(num_blocks):
+            if i == j:
+                min_block_distances[i][j] = 0.0
+                continue
+
+            # Find minimum distance between any pair of nodes from blocks i and j
+            min_dist = float('inf')
+            for node_i in blocks[i].nodes:
+                for node_j in blocks[j].nodes:
+                    dist = euclidean_distance(node_i.position, node_j.position)
+                    if dist < min_dist:
+                        min_dist = dist
+
+            min_block_distances[i][j] = min_dist
 
     for i in range(n):
         for j in range(n):
@@ -179,7 +215,20 @@ def build_cost_matrix(
                 block = blocks[node_i.block_id]
                 cost_matrix[i][j] = get_within_block_cost(block, node_i, node_j)
             else:
-                # Between different blocks: Euclidean distance + turning penalty
-                cost_matrix[i][j] = node_distance(node_i, node_j) + turning_penalty
+                # Between different blocks: distance + penalty + turning
+                base_distance = node_distance(node_i, node_j)
+                min_distance = min_block_distances[node_i.block_id][node_j.block_id]
+
+                # Calculate deviation from minimum possible distance
+                deviation = max(0.0, base_distance - min_distance)
+
+                # Apply distance-based penalty (encourages using nearest nodes)
+                # penalty_multiplier = 1 + (deviation / threshold) ^ penalty_factor
+                if deviation > 0 and distance_threshold > 0:
+                    penalty_multiplier = 1.0 + (deviation / distance_threshold) ** distance_penalty_factor
+                else:
+                    penalty_multiplier = 1.0
+
+                cost_matrix[i][j] = base_distance * penalty_multiplier + turning_penalty
 
     return cost_matrix
