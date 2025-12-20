@@ -15,6 +15,8 @@ from shapely.geometry import Polygon
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
 from src.stage1 import Stage1Result, run_stage1_pipeline
 
+from examples.testcase import testcase
+
 
 def plot_polygon(ax, polygon, **kwargs):
     """Plot a Shapely polygon."""
@@ -59,23 +61,19 @@ def visualize_stage1_pipeline():
     # Create field with multiple obstacles
     print("Creating field with obstacles...")
     field = create_field_with_rectangular_obstacles(
-        field_width=220,
-        field_height=220,
-        obstacle_specs=[
-            (80, 65, 60, 20),  # Obstacle 1
-            (40, 120, 70, 20),  # Obstacle 2
-            (20, 10, 40, 20),  # Obstacle 3 (near boundary)
-        ],
-        name="Demo Field",
+        field_width=testcase["field"]["field_width"],
+        field_height=testcase["field"]["field_height"],
+        obstacle_specs=testcase["field"]["obstacle_specs"],
+        name=testcase["field"]["name"],
     )
 
     # Parameters
     params = FieldParameters(
-        operating_width=5.0,
-        turning_radius=3.0,
-        num_headland_passes=2,
-        driving_direction=0.0,
-        obstacle_threshold=5.0,
+        operating_width=testcase["params"]["operating_width"],
+        turning_radius=testcase["params"]["turning_radius"],
+        num_headland_passes=testcase["params"]["num_headland_passes"],
+        driving_direction=testcase["params"]["driving_direction"],
+        obstacle_threshold=testcase["params"]["obstacle_threshold"],
     )
 
     print(f"Field: {field}")
@@ -115,7 +113,7 @@ def visualize_stage1_pipeline():
     ax1.set_aspect("equal")
 
     # Field boundary
-    plot_filled_polygon(ax1, field.boundary_polygon, color="lightgreen", alpha=0.3, label="Field")
+    plot_filled_polygon(ax1, field.boundary_polygon, color="lightgreen", alpha=0.3, label="Field 123")
     plot_polygon(ax1, field.boundary_polygon, color="darkgreen", linewidth=2)
 
     # Obstacles
@@ -137,7 +135,7 @@ def visualize_stage1_pipeline():
     ax1.set_xlabel("X (m)")
     ax1.set_ylabel("Y (m)")
     ax1.grid(True, alpha=0.3)
-    ax1.legend()
+    # ax1.legend()
 
     # Plot 2: Headland generation
     ax2 = axes[1]
@@ -232,7 +230,7 @@ def visualize_stage1_pipeline():
     ax3.set_xlabel("X (m)")
     ax3.set_ylabel("Y (m)")
     ax3.grid(True, alpha=0.3)
-    ax3.legend()
+    # ax3.legend()
 
     plt.tight_layout()
 

@@ -24,7 +24,7 @@ from src.optimization import (
     get_path_statistics,
 )
 
-
+from examples.testcase import testcase
 def visualize_path(field, blocks, path_plan, title="ACO-Optimized Coverage Path"):
     """
     Visualize the complete coverage path.
@@ -115,7 +115,7 @@ def visualize_path(field, blocks, path_plan, title="ACO-Optimized Coverage Path"
     ax.set_xlabel("X (meters)", fontsize=12)
     ax.set_ylabel("Y (meters)", fontsize=12)
     ax.set_title(title, fontsize=14, fontweight="bold")
-    ax.legend(loc="upper right", fontsize=10)
+    # ax.legend(loc="", fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.set_aspect("equal")
 
@@ -236,28 +236,25 @@ def run_demo(seed=None):
     if seed is not None:
         np.random.seed(seed)
 
+
     # ====================
     # STAGE 1: Field Setup
     # ====================
     print("\n[1/5] Creating field with obstacles...")
 
     field = create_field_with_rectangular_obstacles( 
-        field_width=220,
-        field_height=220,
-        obstacle_specs=[
-            (80, 65, 60, 20),  # Obstacle 1
-            (40, 120, 70, 20),  # Obstacle 2
-            (20, 10, 40, 20),  # Obstacle 3 (near boundary)
-        ],
-        name="Demo Field",
+        field_width=testcase["field"]["field_width"],
+        field_height=testcase["field"]["field_height"],
+        obstacle_specs=testcase["field"]["obstacle_specs"],
+        name=testcase["field"]["name"],
     )
 
     params = FieldParameters(
-        operating_width=5.0,
-        turning_radius=3.0,
-        num_headland_passes=2,
-        driving_direction=0.0,
-        obstacle_threshold=5.0,
+        operating_width=testcase["params"]["operating_width"],
+        turning_radius=testcase["params"]["turning_radius"],
+        num_headland_passes=testcase["params"]["num_headland_passes"],
+        driving_direction=testcase["params"]["driving_direction"],
+        obstacle_threshold=testcase["params"]["obstacle_threshold"],
     )
 
     # Generate preliminary headland (to classify obstacles)
@@ -361,13 +358,13 @@ def run_demo(seed=None):
     # (Paper uses β=5.0 and ρ=0.5; here we use a slightly lower β and ρ
     #  for smoother convergence in this interactive demo.)
     aco_params = ACOParameters(
-        alpha=1.0,
+        alpha=testcase['aco']['alpha'],
         beta=2.0,
-        rho=0.1,
-        q=100.0,
+        rho=testcase['aco']['rho'],
+        q=testcase['aco']['q'],
         num_ants=num_ants,
-        num_iterations=100,
-        elitist_weight=2.0,
+        num_iterations=testcase['aco']['num_iterations'],
+        elitist_weight=testcase['aco']['elitist_weight'],
     )
 
     solver = ACOSolver(

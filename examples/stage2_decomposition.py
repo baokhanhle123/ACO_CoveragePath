@@ -24,6 +24,7 @@ from src.decomposition import (
     merge_blocks_by_criteria,
 )
 from src.stage1 import Stage1Result, run_stage1_pipeline
+from examples.testcase import testcase
 
 
 def plot_polygon(ax, polygon, **kwargs):
@@ -71,23 +72,19 @@ def visualize_stage2_pipeline():
 
     # Create field with multiple obstacles
     field = create_field_with_rectangular_obstacles(
-        field_width=220,
-        field_height=220,
-        obstacle_specs=[
-            (80, 65, 60, 20),  # Obstacle 1
-            (40, 120, 70, 20),  # Obstacle 2
-            (20, 10, 40, 20),  # Obstacle 3 (near boundary)
-        ],
-        name="Demo Field",
+        field_width=testcase["field"]["field_width"],        
+        field_height=testcase["field"]["field_height"],
+        obstacle_specs=testcase["field"]["obstacle_specs"],
+        name=testcase["field"]["name"],
     )
 
     # Parameters (same as Stage 1 demo for consistency)
     params = FieldParameters(
-        operating_width=5.0,
-        turning_radius=3.0,
-        num_headland_passes=2,
-        driving_direction=0.0,
-        obstacle_threshold=5.0,
+        operating_width=testcase["params"]["operating_width"],
+        turning_radius=testcase["params"]["turning_radius"],
+        num_headland_passes=testcase["params"]["num_headland_passes"],
+        driving_direction=testcase["params"]["driving_direction"],
+        obstacle_threshold=testcase["params"]["obstacle_threshold"],
     )
 
     print(f"Field: {field}")

@@ -13,6 +13,7 @@ easy to understand the coverage strategy and path efficiency.
 
 import os
 import sys
+import time
 from typing import Optional, Tuple
 
 import matplotlib.animation as animation
@@ -20,6 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
+from examples.testcase import testcase
 from src.data import FieldParameters, create_field_with_rectangular_obstacles
 from src.decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
 from src.geometry import generate_field_headland, generate_parallel_tracks
@@ -42,11 +44,14 @@ def run_full_pipeline(seed: Optional[int] = None):
     Run the complete 3-stage pipeline and return all results.
 
     Returns:
-        Tuple of (field, params, final_blocks, path_plan, solver, stats)
+        Tuple of (field, params, final_blocks, path_plan, solver, stats, processing_time)
     """
     print("=" * 80)
     print("PATH ANIMATION: Running 3-Stage Pipeline")
     print("=" * 80)
+
+    # Start timing
+    start_time = time.time()
 
     if seed is not None:
         np.random.seed(seed)
@@ -58,22 +63,18 @@ def run_full_pipeline(seed: Optional[int] = None):
     print("\n[Stage 1] Creating field with obstacles...")
 
     field = create_field_with_rectangular_obstacles(
-        field_width=220,
-        field_height=220,
-        obstacle_specs=[
-            (80, 65, 60, 20),  # Obstacle 1
-            (40, 120, 70, 20),  # Obstacle 2
-            (20, 10, 40, 20),  # Obstacle 3 (near boundary)
-        ],
-        name="Demo Field",
+        field_width=testcase['field']['field_width'],
+        field_height=testcase['field']['field_height'],
+        obstacle_specs=testcase['field']['obstacle_specs'],
+        name=testcase['field']['name'],
     )
 
     params = FieldParameters(
-        operating_width=5.0,
-        turning_radius=3.0,
-        num_headland_passes=2,
-        driving_direction=0.0,
-        obstacle_threshold=5.0,
+        operating_width=testcase['params']['operating_width'],
+        turning_radius=testcase['params']['turning_radius'],
+        num_headland_passes=testcase['params']['num_headland_passes'],
+        driving_direction=testcase['params']['driving_direction'],
+        obstacle_threshold=testcase['params']['obstacle_threshold'],
     )
 
     # Generate preliminary headland
@@ -160,13 +161,13 @@ def run_full_pipeline(seed: Optional[int] = None):
     num_ants = min(max(num_nodes, 10), 40)
 
     aco_params = ACOParameters(
-        alpha=1.0,
-        beta=2.0,
-        rho=0.1,
-        q=100.0,
+        alpha=testcase['aco']['alpha'],
+        beta=testcase['aco']['beta'],
+        rho=testcase['aco']['rho'],
+        q=testcase['aco']['q'],
         num_ants=num_ants,
-        num_iterations=100,
-        elitist_weight=2.0,
+        num_iterations=testcase['aco']['num_iterations'],
+        elitist_weight=testcase['aco']['elitist_weight'],
     )
 
     solver = ACOSolver(
@@ -188,10 +189,15 @@ def run_full_pipeline(seed: Optional[int] = None):
     path_plan = generate_path_from_solution(best_solution, final_blocks, all_nodes)
     stats = get_path_statistics(path_plan)
 
+    # Calculate processing time
+    processing_time = time.time() - start_time
+
     print(f"  ✓ Generated path ({stats['total_distance']:.2f}m total)")
     print(f"    Efficiency: {stats['efficiency']*100:.1f}%")
+    print(f"\n[PROCESSING TIME]")
+    print(f"  Total processing time: {processing_time:.2f} s")
 
-    return field, params, final_blocks, path_plan, solver, stats
+    return field, params, final_blocks, path_plan, solver, stats, processing_time
 
 
 class PathAnimator:
@@ -680,7 +686,7 @@ def main():
 
     # Run pipeline
     try:
-        field, params, blocks, path_plan, solver, stats = run_full_pipeline(seed=args.seed)
+        field, params, blocks, path_plan, solver, stats, processing_time = run_full_pipeline(seed=args.seed)
     except Exception as e:
         print(f"\n✗ Error running pipeline: {e}")
         sys.exit(1)
