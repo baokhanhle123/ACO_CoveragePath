@@ -78,7 +78,7 @@ def render_stage1_tab():
             for obs in stage1.classified_obstacles:
                 obs_type = obs.obstacle_type.name
                 area = obs.polygon.area
-                st.text(f"Obstacle {obs.original_index}: Type {obs_type} - Area: {area:.1f} m²")
+                st.text(f"Obstacle {obs.index}: Type {obs_type} - Area: {area:.1f} m²")
 
                 if obs.is_merged():
                     merged_from = sorted(list(obs.merged_from))

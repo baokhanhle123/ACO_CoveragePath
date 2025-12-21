@@ -146,7 +146,9 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
             q=config.aco_params['q'],
             num_ants=config.aco_params['num_ants'],
             num_iterations=config.aco_params['num_iterations'],
-            elitist_weight=config.aco_params['elitist_weight']
+            elitist_weight=config.aco_params['elitist_weight'],
+            record_history=config.aco_params.get('record_history', False),
+            history_interval=config.aco_params.get('history_interval', 1),
         )
 
         results['num_ants'] = aco_params.num_ants

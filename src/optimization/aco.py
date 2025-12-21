@@ -29,6 +29,8 @@ class ACOParameters:
     - num_ants: number of ants (suggested: n, where n = num_nodes)
     - num_iterations: number of iterations (paper uses 100)
     - elitist_weight: extra weight for best solution (default 2.0)
+    - record_history: store pheromone snapshots for animation (default False)
+    - history_interval: snapshot cadence in iterations (default 1)
     """
 
     alpha: float = 1.0  # Pheromone importance
@@ -38,6 +40,8 @@ class ACOParameters:
     num_ants: int = 20  # Number of ants per iteration
     num_iterations: int = 100  # Number of iterations
     elitist_weight: float = 2.0  # Extra weight for best solution
+    record_history: bool = False  # Store pheromone snapshots for animation
+    history_interval: int = 1  # Snapshot cadence in iterations
 
 
 @dataclass
@@ -334,6 +338,8 @@ class ACOSolver:
         nodes: List[BlockNode],
         cost_matrix: np.ndarray,
         params: Optional[ACOParameters] = None,
+        record_history: Optional[bool] = None,
+        history_interval: Optional[int] = None,
     ):
         """
         Initialize ACO solver.
@@ -343,6 +349,8 @@ class ACOSolver:
             nodes: List of entry/exit nodes
             cost_matrix: Cost matrix for transitions
             params: ACO parameters (uses defaults if None)
+            record_history: Override params.record_history if set
+            history_interval: Override params.history_interval if set
         """
         self.blocks = blocks
         self.nodes = nodes
@@ -361,6 +369,21 @@ class ACOSolver:
             for j in range(self.num_nodes):
                 if self.cost_matrix[i][j] > 0 and self.cost_matrix[i][j] < 1e9:
                     self.heuristic[i][j] = 1.0 / self.cost_matrix[i][j]
+
+        if record_history is None:
+            record_history = self.params.record_history
+        if history_interval is None:
+            history_interval = self.params.history_interval
+
+        self.record_history = bool(record_history)
+        if self.record_history:
+            self.history_interval = max(1, int(history_interval))
+            self.pheromone_history = []
+            self.pheromone_history_iterations = []
+        else:
+            self.history_interval = 0
+            self.pheromone_history = None
+            self.pheromone_history_iterations = None
 
         # Best solution tracking
         self.best_solution: Optional[Solution] = None
@@ -428,6 +451,10 @@ class ACOSolver:
         if verbose:
             print(f"Running ACO with {self.params.num_ants} ants for {self.params.num_iterations} iterations...")
 
+        if self.record_history:
+            self.pheromone_history = [self.pheromone.copy()]
+            self.pheromone_history_iterations = [0]
+
         for iteration in range(self.params.num_iterations):
             # Create ants
             ants = [Ant(self.nodes, self.blocks, self.cost_matrix) for _ in range(self.params.num_ants)]
@@ -472,6 +499,16 @@ class ACOSolver:
             if self.best_solution:
                 for _ in range(int(self.params.elitist_weight)):
                     self._deposit_pheromone(self.best_solution)
+
+            # Record pheromone history snapshots if enabled
+            if self.record_history:
+                should_record = (
+                    (iteration + 1) % self.history_interval == 0
+                    or (iteration + 1) == self.params.num_iterations
+                )
+                if should_record:
+                    self.pheromone_history.append(self.pheromone.copy())
+                    self.pheromone_history_iterations.append(iteration + 1)
 
             # Print progress
             if verbose and (iteration + 1) % 10 == 0:

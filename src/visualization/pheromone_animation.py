@@ -6,10 +6,12 @@ during ACO optimization process.
 """
 
 from typing import Optional
+from io import BytesIO
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 
 from ..data import Field, Block
 from ..optimization import ACOSolver
@@ -54,7 +56,8 @@ class PheromoneAnimator:
         self.num_nodes = solver.num_nodes
 
         # Check if solver recorded history
-        self.has_history = hasattr(solver, 'pheromone_history') and solver.pheromone_history is not None
+        self.has_history = bool(getattr(solver, 'pheromone_history', None))
+        self.history_iterations = getattr(solver, 'pheromone_history_iterations', None)
 
         # Animation state
         self.fig = None
@@ -66,7 +69,10 @@ class PheromoneAnimator:
         self.fig, self.ax = plt.subplots(figsize=self.figsize)
 
         # Initial heatmap (will be updated in animation)
-        initial_data = self.pheromone if not self.has_history else self.pheromone_history[0]
+        if self.has_history and self.solver.pheromone_history:
+            initial_data = self.solver.pheromone_history[0]
+        else:
+            initial_data = self.pheromone
 
         self.heatmap = self.ax.imshow(
             initial_data,
@@ -103,8 +109,16 @@ class PheromoneAnimator:
             self.heatmap.set_data(data)
 
             # Update title with iteration number
+            iteration_label = frame + 1
+            if self.history_iterations and frame < len(self.history_iterations):
+                iteration_label = self.history_iterations[frame]
+
             self.ax.set_title(
-                f'ACO Pheromone Matrix - Iteration {frame + 1}',
+                (
+                    'ACO Pheromone Matrix - Initial'
+                    if iteration_label == 0
+                    else f'ACO Pheromone Matrix - Iteration {iteration_label}'
+                ),
                 fontsize=14,
                 fontweight='bold'
             )
@@ -175,19 +189,17 @@ class PheromoneAnimator:
             fps = self.fps
 
         if not self.has_history:
-            # Create static visualization instead
-            self._setup_figure()
-            self.fig.savefig(filename, dpi=dpi, bbox_inches='tight')
-            plt.close(self.fig)
+            self._save_static_output(filename, dpi)
             return
 
         # Create animation
         anim = self.create_animation()
 
         # Save
-        if filename.endswith(".gif"):
+        lowered = filename.lower()
+        if lowered.endswith(".gif"):
             anim.save(filename, writer="pillow", fps=fps, dpi=dpi)
-        elif filename.endswith(".mp4"):
+        elif lowered.endswith(".mp4"):
             anim.save(
                 filename,
                 writer="ffmpeg",
@@ -199,6 +211,28 @@ class PheromoneAnimator:
         else:
             # Default to GIF
             anim.save(filename, writer="pillow", fps=fps, dpi=dpi)
+
+        plt.close(self.fig)
+
+    def _save_static_output(self, filename: str, dpi: int) -> None:
+        """Save a static visualization when history is unavailable."""
+        self._setup_figure()
+
+        lowered = filename.lower()
+        if lowered.endswith(".mp4"):
+            plt.close(self.fig)
+            raise ValueError("MP4 output requires pheromone history; enable record_history=True.")
+
+        if lowered.endswith(".gif"):
+            buffer = BytesIO()
+            self.fig.savefig(buffer, format="png", dpi=dpi, bbox_inches='tight')
+            buffer.seek(0)
+            image = Image.open(buffer)
+            image.save(filename, format="GIF", save_all=True)
+            image.close()
+            buffer.close()
+        else:
+            self.fig.savefig(filename, dpi=dpi, bbox_inches='tight')
 
         plt.close(self.fig)
 

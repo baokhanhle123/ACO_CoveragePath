@@ -15,6 +15,7 @@ import pytest
 from src.data.block import Block, BlockNode
 from src.data.track import Track
 from src.optimization.aco import ACOParameters, ACOSolver, Ant, Solution
+from src.optimization.cost_matrix import build_cost_matrix
 
 
 class TestACOParameters:
@@ -31,6 +32,8 @@ class TestACOParameters:
         assert params.num_ants == 20
         assert params.num_iterations == 100
         assert params.elitist_weight == 2.0
+        assert params.record_history is False
+        assert params.history_interval == 1
 
     def test_custom_parameters(self):
         """Test custom parameter values."""
@@ -42,6 +45,8 @@ class TestACOParameters:
             num_ants=10,
             num_iterations=50,
             elitist_weight=1.5,
+            record_history=True,
+            history_interval=5,
         )
 
         assert params.alpha == 2.0
@@ -51,6 +56,8 @@ class TestACOParameters:
         assert params.num_ants == 10
         assert params.num_iterations == 50
         assert params.elitist_weight == 1.5
+        assert params.record_history is True
+        assert params.history_interval == 5
 
 
 class TestSolution:
@@ -104,8 +111,6 @@ class TestAnt:
 
     def setup_method(self):
         """Set up test blocks and nodes."""
-        from src.optimization.cost_matrix import build_cost_matrix
-
         # Create 2 simple blocks with 1 track each
         self.block1 = Block(
             block_id=0,
@@ -229,6 +234,52 @@ class TestAnt:
         assert solution.cost >= 0
         # Note: With random selection, solution may not always be valid
         # The ACO solver with multiple ants will find valid solutions
+
+
+class TestACOSolverHistory:
+    """Test pheromone history recording."""
+
+    def _build_problem(self):
+        block1 = Block(
+            block_id=0,
+            boundary=[(0, 0), (10, 0), (10, 10), (0, 10)],
+            tracks=[Track(start=(0, 5), end=(10, 5), index=0)],
+        )
+        block2 = Block(
+            block_id=1,
+            boundary=[(20, 0), (30, 0), (30, 10), (20, 10)],
+            tracks=[Track(start=(20, 5), end=(30, 5), index=0)],
+        )
+
+        blocks = [block1, block2]
+        nodes = block1.create_entry_exit_nodes(start_index=0) + block2.create_entry_exit_nodes(start_index=4)
+        cost_matrix = build_cost_matrix(blocks, nodes)
+
+        return blocks, nodes, cost_matrix
+
+    def test_solver_records_history(self):
+        blocks, nodes, cost_matrix = self._build_problem()
+
+        params = ACOParameters(
+            num_ants=2,
+            num_iterations=3,
+            record_history=True,
+            history_interval=2,
+        )
+
+        solver = ACOSolver(
+            blocks=blocks,
+            nodes=nodes,
+            cost_matrix=cost_matrix,
+            params=params,
+        )
+
+        solver.solve(verbose=False)
+
+        assert solver.pheromone_history is not None
+        assert solver.pheromone_history_iterations == [0, 2, 3]
+        assert len(solver.pheromone_history) == len(solver.pheromone_history_iterations)
+        assert solver.pheromone_history[0].shape == (len(nodes), len(nodes))
 
 
 class TestACOSolver:
