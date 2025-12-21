@@ -5,6 +5,10 @@ Main Streamlit application providing interactive visualization
 and demonstration of the ACO-based coverage path planning system.
 """
 
+# Configure matplotlib for headless environment (Streamlit Cloud)
+import matplotlib
+matplotlib.use('Agg')  # Headless backend for Streamlit Cloud
+
 import streamlit as st
 from pathlib import Path
 
