@@ -39,7 +39,10 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### Navigation")
-    st.markdown("Use the **Quick Demo** tab to run pre-configured scenarios.")
+    st.markdown("**Quick Demo**: Run pre-configured scenarios")
+    st.markdown("**Stage 1**: Field geometry and obstacle classification")
+    st.markdown("**Stage 2**: Boustrophedon decomposition")
+    st.markdown("**Stage 3**: ACO path optimization")
 
     st.markdown("---")
     st.caption("© 2025 ACO Coverage Path Planning Project")
@@ -48,9 +51,26 @@ with st.sidebar:
 st.title("🚜 ACO Coverage Path Planning Dashboard")
 st.markdown("Interactive demonstration and analysis tool for coverage path planning using Ant Colony Optimization")
 
-# Single tab for now (Phase 2A)
-tab1 = st.tabs(["📊 Quick Demo"])[0]
+# Multi-tab interface for 3-stage visualization
+tabs = st.tabs([
+    "🚀 Quick Demo",
+    "📐 Stage 1: Field Geometry",
+    "🔲 Stage 2: Decomposition",
+    "🎯 Stage 3: Path Optimization"
+])
 
-with tab1:
+with tabs[0]:
     from src.dashboard.quick_demo import render_quick_demo_tab
     render_quick_demo_tab()
+
+with tabs[1]:
+    from src.dashboard.stage_tabs import render_stage1_tab
+    render_stage1_tab()
+
+with tabs[2]:
+    from src.dashboard.stage_tabs import render_stage2_tab
+    render_stage2_tab()
+
+with tabs[3]:
+    from src.dashboard.stage_tabs import render_stage3_tab
+    render_stage3_tab()

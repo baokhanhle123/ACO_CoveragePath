@@ -12,6 +12,7 @@ from .path_animation import PathAnimator, animate_path_execution
 from .plot_utils import create_field_plot, plot_path_plan
 from .pheromone_viz import PheromoneVisualizer
 from .pheromone_animation import PheromoneAnimator, animate_pheromone_evolution
+from .stage_viz import plot_stage1_result, plot_stage2_result, plot_stage3_result
 
 __all__ = [
     "PathAnimator",
@@ -21,4 +22,7 @@ __all__ = [
     "PheromoneVisualizer",
     "PheromoneAnimator",
     "animate_pheromone_evolution",
+    "plot_stage1_result",
+    "plot_stage2_result",
+    "plot_stage3_result",
 ]

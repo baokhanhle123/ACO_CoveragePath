@@ -10,9 +10,8 @@ import time
 from typing import Dict
 
 from ..data import FieldParameters, create_field_with_rectangular_obstacles
-from ..decomposition import boustrophedon_decomposition, merge_blocks_by_criteria
-from ..geometry import generate_field_headland, generate_parallel_tracks
-from ..obstacles.classifier import classify_all_obstacles, get_type_d_obstacles
+from ..stage1 import run_stage1_pipeline, Stage1Result
+from ..decomposition import boustrophedon_decomposition, merge_blocks_by_criteria, cluster_tracks_into_blocks
 from ..optimization import (
     ACOParameters, ACOSolver, build_cost_matrix,
     generate_path_from_solution
@@ -40,7 +39,7 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
     }
 
     try:
-        # Stage 1: Field Setup
+        # Create field and parameters
         field = create_field_with_rectangular_obstacles(
             field_width=config.field_config['width'],
             field_height=config.field_config['height'],
@@ -68,23 +67,23 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
         results['turning_radius'] = params.turning_radius
         results['driving_direction'] = params.driving_direction
 
-        # Stage 2: Decomposition
-        field_headland = generate_field_headland(
-            field_boundary=field.boundary_polygon,
-            operating_width=params.operating_width,
-            num_passes=params.num_headland_passes,
-        )
+        # Stage 1: Run official pipeline (field geometry, obstacle classification, global tracks)
+        stage1_result = run_stage1_pipeline(field, params)
 
-        classified_obstacles = classify_all_obstacles(
-            obstacle_boundaries=field.obstacles,
-            field_inner_boundary=field_headland.inner_boundary,
-            driving_direction_degrees=params.driving_direction,
-            operating_width=params.operating_width,
-            threshold=params.obstacle_threshold,
-        )
-
-        type_d_obstacles = get_type_d_obstacles(classified_obstacles)
+        # Extract results for downstream stages
+        field_headland = stage1_result.field_headland
+        type_d_obstacles = stage1_result.type_d_obstacles
+        type_b_obstacles = stage1_result.type_b_obstacles
+        type_b_polygons = [obs.polygon for obs in type_b_obstacles]
         obstacle_polygons = [obs.polygon for obs in type_d_obstacles]
+        global_tracks = stage1_result.tracks  # CRITICAL: Global tracks for clustering
+
+        # Store Stage 1 results
+        results['stage1_result'] = stage1_result
+        results['global_tracks'] = global_tracks
+        results['num_global_tracks'] = len(global_tracks)
+
+        # Stage 2: Decomposition
 
         preliminary_blocks = boustrophedon_decomposition(
             inner_boundary=field_headland.inner_boundary,
@@ -97,19 +96,38 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
             operating_width=params.operating_width
         )
 
+        # Store preliminary blocks for visualization
+        results['preliminary_blocks'] = preliminary_blocks
+
+        # Cluster global tracks into blocks (Zhou et al. 2014 Section 2.3.2)
+        # CRITICAL: This replaces per-block track generation with proper clustering
+        final_blocks = cluster_tracks_into_blocks(
+            global_tracks=global_tracks,
+            blocks=final_blocks
+        )
+
+        # Filter out blocks with no tracks (too narrow to traverse)
+        # Some blocks may be too narrow perpendicular to driving direction to receive any tracks
+        blocks_before_filter = len(final_blocks)
+        traversable_blocks = [b for b in final_blocks if len(b.tracks) > 0]
+        filtered_count = blocks_before_filter - len(traversable_blocks)
+
+        # Renumber blocks to be consecutive (required for ACO solver)
+        for new_id, block in enumerate(traversable_blocks):
+            block.block_id = new_id
+
+        final_blocks = traversable_blocks
+
+        # Store filtering statistics
+        results['num_blocks_before_filter'] = blocks_before_filter
+        results['num_blocks_filtered'] = filtered_count
         results['num_blocks'] = len(final_blocks)
 
-        # Generate tracks
-        for block in final_blocks:
-            tracks = generate_parallel_tracks(
-                inner_boundary=block.polygon,
-                driving_direction_degrees=params.driving_direction,
-                operating_width=params.operating_width,
+        # Add warning if blocks were filtered
+        if filtered_count > 0:
+            results['blocks_filtered_warning'] = (
+                f"Filtered {filtered_count} block(s) with no tracks (too narrow to traverse)"
             )
-            for i, track in enumerate(tracks):
-                track.block_id = block.block_id
-                track.index = i
-            block.tracks = tracks
 
         # Stage 3: ACO Optimization
         all_nodes = []
@@ -141,9 +159,7 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
             blocks=final_blocks,
             nodes=all_nodes,
             cost_matrix=cost_matrix,
-            params=aco_params,
-            record_history=config.aco_params.get('record_history', True),
-            history_interval=config.aco_params.get('history_interval', 5)
+            params=aco_params
         )
 
         best_solution = solver.solve(verbose=False)
