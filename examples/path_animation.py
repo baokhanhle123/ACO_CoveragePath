@@ -19,6 +19,7 @@ from typing import Optional, Tuple
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.collections import LineCollection
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
 from examples.testcase import testcase
@@ -161,6 +162,10 @@ def run_full_pipeline(seed: Optional[int] = None):
     num_nodes = len(all_nodes)
     num_ants = min(max(num_nodes, 10), 40)
 
+    # Enable pheromone history recording for animation
+    # Record every 5-10 iterations to balance detail vs file size
+    history_interval = max(1, testcase['aco']['num_iterations'] // 20)  # ~5% of iterations
+
     aco_params = ACOParameters(
         alpha=testcase['aco']['alpha'],
         beta=testcase['aco']['beta'],
@@ -169,6 +174,8 @@ def run_full_pipeline(seed: Optional[int] = None):
         num_ants=num_ants,
         num_iterations=testcase['aco']['num_iterations'],
         elitist_weight=testcase['aco']['elitist_weight'],
+        record_history=True,
+        history_interval=history_interval,
     )
 
     solver = ACOSolver(
@@ -198,7 +205,7 @@ def run_full_pipeline(seed: Optional[int] = None):
     print(f"\n[PROCESSING TIME]")
     print(f"  Total processing time: {processing_time:.2f} s")
 
-    return field, params, final_blocks, path_plan, solver, stats, processing_time
+    return field, params, final_blocks, path_plan, solver, stats, processing_time, all_nodes, cost_matrix
 
 
 class PathAnimator:
@@ -644,6 +651,372 @@ class PathAnimator:
         return anim
 
 
+class PheromoneTrailAnimator:
+    """
+    Animates the evolution of ACO pheromone trails on the field map.
+    
+    Features:
+    - Lines connecting nodes with thickness/color based on pheromone intensity
+    - Evolution over ACO iterations
+    - Visual representation of how ants discover optimal paths
+    """
+
+    def __init__(
+        self,
+        field,
+        blocks,
+        nodes,
+        solver,
+        cost_matrix,
+        figsize=(16, 10),
+        speed_factor=1.0,
+        min_pheromone_threshold=0.01,
+        max_edges=None,
+    ):
+        """
+        Initialize the pheromone trail animator.
+
+        Args:
+            field: Field object with boundary and obstacles
+            blocks: List of blocks from decomposition
+            nodes: List of BlockNode objects
+            solver: ACOSolver instance with pheromone_history recorded
+            cost_matrix: Cost matrix for filtering valid edges
+            figsize: Figure size tuple
+            speed_factor: Animation speed multiplier (1.0 = normal, >1.0 = faster)
+            min_pheromone_threshold: Minimum pheromone value to visualize (reduce clutter)
+            max_edges: Maximum number of edges to draw (None = all valid edges)
+        """
+        self.field = field
+        self.blocks = blocks
+        self.nodes = nodes
+        self.solver = solver
+        self.cost_matrix = cost_matrix
+        self.speed_factor = speed_factor
+        self.min_pheromone_threshold = min_pheromone_threshold
+        self.max_edges = max_edges
+
+        # Check if solver has history
+        self.has_history = bool(getattr(solver, 'pheromone_history', None))
+        if not self.has_history:
+            raise ValueError("Solver must have record_history=True to create pheromone animation")
+
+        self.pheromone_history = solver.pheromone_history
+        self.history_iterations = getattr(solver, 'pheromone_history_iterations', None)
+
+        # Extract node positions
+        self.node_positions = [node.position for node in nodes]
+        self.num_nodes = len(nodes)
+
+        # Filter valid edges (exclude infinite cost transitions)
+        self.valid_edges = []
+        for i in range(self.num_nodes):
+            for j in range(i + 1, self.num_nodes):  # Only upper triangle (symmetric matrix)
+                if cost_matrix[i][j] < 1e9:  # Valid transition
+                    self.valid_edges.append((i, j))
+
+        # Limit edges if requested
+        if max_edges is not None and len(self.valid_edges) > max_edges:
+            # Keep edges with highest average pheromone (use final state)
+            edge_scores = []
+            final_pheromone = self.pheromone_history[-1] if self.pheromone_history else solver.pheromone
+            for i, j in self.valid_edges:
+                avg_pheromone = (final_pheromone[i][j] + final_pheromone[j][i]) / 2.0
+                edge_scores.append((avg_pheromone, (i, j)))
+            edge_scores.sort(reverse=True)
+            self.valid_edges = [edge for _, edge in edge_scores[:max_edges]]
+
+        # Calculate global pheromone range for normalization
+        self.global_pheromone_max = 0.0
+        for pheromone_matrix in self.pheromone_history:
+            self.global_pheromone_max = max(self.global_pheromone_max, np.max(pheromone_matrix))
+        # Add small epsilon to avoid division by zero
+        if self.global_pheromone_max < 1e-10:
+            self.global_pheromone_max = 1.0
+
+        # Visual parameters
+        self.min_line_width = 0.5
+        self.max_line_width = 6.0
+        self.min_alpha = 0.2
+        self.max_alpha = 1.0
+        self.colormap = plt.cm.YlOrRd  # Yellow-Orange-Red colormap
+
+        # Animation state
+        self.fig = None
+        self.ax = None
+        self.pheromone_lines = {}  # Dictionary of line objects keyed by (i, j)
+        self.colorbar = None
+        self.iteration_text = None
+
+        # Setup figure
+        self._setup_figure(figsize)
+
+    def _setup_figure(self, figsize):
+        """Setup the matplotlib figure and static elements."""
+        self.fig, self.ax = plt.subplots(figsize=figsize)
+
+        # Draw field boundary
+        field_x, field_y = zip(*self.field.boundary_polygon.exterior.coords)
+        self.ax.plot(field_x, field_y, "k-", linewidth=2.5, label="Field Boundary", zorder=1)
+
+        # Draw obstacles
+        for i, obs in enumerate(self.field.obstacle_polygons):
+            obs_x, obs_y = zip(*obs.exterior.coords)
+            self.ax.fill(
+                obs_x,
+                obs_y,
+                color="gray",
+                alpha=0.5,
+                edgecolor="black",
+                linewidth=1.5,
+                zorder=2,
+            )
+
+        # Draw blocks with different colors
+        colors = plt.cm.Set3(np.linspace(0, 1, len(self.blocks)))
+        self.block_colors = {}
+        for i, block in enumerate(self.blocks):
+            block_x, block_y = zip(*block.polygon.exterior.coords)
+            color = colors[i]
+            self.block_colors[block.block_id] = color
+            self.ax.fill(
+                block_x,
+                block_y,
+                color=color,
+                alpha=0.25,
+                edgecolor=color,
+                linewidth=1.5,
+                zorder=3,
+            )
+            # Add block label
+            centroid = block.polygon.centroid
+            self.ax.text(
+                centroid.x,
+                centroid.y,
+                f"Block {block.block_id}",
+                ha="center",
+                va="center",
+                fontsize=9,
+                fontweight="bold",
+                zorder=4,
+            )
+
+        # Initialize pheromone trail lines (will be updated in animation)
+        # Use initial pheromone state
+        initial_pheromone = self.pheromone_history[0] if self.pheromone_history else self.solver.pheromone
+        self._update_pheromone_lines(initial_pheromone)
+
+        # Add colorbar
+        sm = plt.cm.ScalarMappable(
+            cmap=self.colormap,
+            norm=plt.Normalize(vmin=0, vmax=self.global_pheromone_max)
+        )
+        sm.set_array([])
+        self.colorbar = plt.colorbar(sm, ax=self.ax, label='Pheromone Intensity', pad=0.02)
+        self.colorbar.ax.tick_params(labelsize=9)
+
+        # Iteration text overlay
+        self.iteration_text = self.ax.text(
+            0.02,
+            0.98,
+            "",
+            transform=self.ax.transAxes,
+            fontsize=12,
+            fontweight="bold",
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.9, edgecolor="black"),
+            zorder=11,
+        )
+
+        # Draw nodes as small markers
+        for node in self.nodes:
+            x, y = node.position
+            self.ax.plot(
+                x, y,
+                marker="o",
+                markersize=4,
+                color="black",
+                zorder=6,
+            )
+
+        # Setup axes
+        self.ax.set_xlabel("X (meters)", fontsize=12)
+        self.ax.set_ylabel("Y (meters)", fontsize=12)
+        self.ax.set_title(
+            "ACO Pheromone Evolution - Iteration 0",
+            fontsize=14,
+            fontweight="bold",
+        )
+        self.ax.grid(True, alpha=0.3)
+        self.ax.set_aspect("equal")
+
+        # Legend
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D(
+                [0], [0],
+                color=self.colormap(0.8),
+                linewidth=self.max_line_width,
+                label="Strong Trail (High Pheromone)",
+            ),
+            Line2D(
+                [0], [0],
+                color=self.colormap(0.4),
+                linewidth=(self.min_line_width + self.max_line_width) / 2,
+                label="Weak Trail (Low Pheromone)",
+            ),
+        ]
+        self.ax.legend(handles=legend_elements, loc="upper right", fontsize=10)
+
+        plt.tight_layout()
+
+    def _update_pheromone_lines(self, pheromone_matrix):
+        """Update pheromone trail lines based on current pheromone matrix."""
+        # Normalize pheromone values
+        normalized_pheromone = pheromone_matrix / self.global_pheromone_max
+
+        # Update or create lines for each valid edge
+        for i, j in self.valid_edges:
+            # Get average pheromone (symmetric matrix)
+            avg_pheromone = (pheromone_matrix[i][j] + pheromone_matrix[j][i]) / 2.0
+            normalized = avg_pheromone / self.global_pheromone_max
+
+            # Skip if below threshold
+            if normalized < self.min_pheromone_threshold:
+                if (i, j) in self.pheromone_lines:
+                    self.pheromone_lines[(i, j)].set_alpha(0.0)
+                continue
+
+            # Map to visual properties
+            line_width = self.min_line_width + normalized * (self.max_line_width - self.min_line_width)
+            line_alpha = self.min_alpha + normalized * (self.max_alpha - self.min_alpha)
+            line_color = self.colormap(normalized)
+
+            # Get node positions
+            pos_i = self.node_positions[i]
+            pos_j = self.node_positions[j]
+
+            # Create or update line
+            if (i, j) not in self.pheromone_lines:
+                line, = self.ax.plot(
+                    [pos_i[0], pos_j[0]],
+                    [pos_i[1], pos_j[1]],
+                    color=line_color,
+                    linewidth=line_width,
+                    alpha=line_alpha,
+                    zorder=5,
+                )
+                self.pheromone_lines[(i, j)] = line
+            else:
+                line = self.pheromone_lines[(i, j)]
+                line.set_linewidth(line_width)
+                line.set_alpha(line_alpha)
+                line.set_color(line_color)
+
+    def animate_frame(self, frame):
+        """Update function for animation."""
+        if not self.has_history or frame >= len(self.pheromone_history):
+            return []
+
+        # Get pheromone matrix for current frame
+        pheromone_matrix = self.pheromone_history[frame]
+
+        # Update all pheromone lines
+        self._update_pheromone_lines(pheromone_matrix)
+
+        # Update iteration text
+        iteration_num = frame
+        if self.history_iterations and frame < len(self.history_iterations):
+            iteration_num = self.history_iterations[frame]
+        total_iterations = self.solver.params.num_iterations
+
+        self.iteration_text.set_text(
+            f"Iteration: {iteration_num}/{total_iterations}\n"
+            f"Edges shown: {len(self.valid_edges)}"
+        )
+
+        # Update title
+        self.ax.set_title(
+            f"ACO Pheromone Evolution - Iteration {iteration_num}/{total_iterations}",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+        # Return all artists that need updating
+        return list(self.pheromone_lines.values()) + [self.iteration_text]
+
+    def create_animation(
+        self, interval=100, repeat=True, save_path=None, fps=10, bitrate=1800
+    ):
+        """
+        Create and return the animation.
+
+        Args:
+            interval: Milliseconds between frames
+            repeat: Whether to loop the animation
+            save_path: Optional path to save animation (GIF or MP4)
+            fps: Frames per second for saved video
+            bitrate: Bitrate for MP4 encoding
+
+        Returns:
+            matplotlib.animation.FuncAnimation object
+        """
+        if not self.has_history:
+            raise ValueError("Cannot create animation without pheromone history")
+
+        # Calculate number of frames needed
+        iterations_per_frame = max(1, int(self.speed_factor))
+        num_frames = len(self.pheromone_history)
+
+        print(f"\nCreating pheromone animation:")
+        print(f"  - Total iterations recorded: {len(self.pheromone_history)}")
+        print(f"  - Animation frames: {num_frames}")
+        print(f"  - Speed factor: {self.speed_factor}x")
+        print(f"  - Edges visualized: {len(self.valid_edges)}")
+        print(f"  - Duration: ~{num_frames * interval / 1000:.1f}s")
+
+        anim = animation.FuncAnimation(
+            self.fig,
+            self.animate_frame,
+            frames=num_frames,
+            interval=interval,
+            repeat=repeat,
+            blit=False,  # Set to False for better compatibility
+        )
+
+        # Save animation if requested
+        if save_path:
+            print(f"\nSaving pheromone animation to: {save_path}")
+            try:
+                if save_path.endswith(".gif"):
+                    anim.save(
+                        save_path,
+                        writer="pillow",
+                        fps=fps,
+                        dpi=100,
+                    )
+                elif save_path.endswith(".mp4"):
+                    anim.save(
+                        save_path,
+                        writer="ffmpeg",
+                        fps=fps,
+                        bitrate=bitrate,
+                        extra_args=["-vcodec", "libx264"],
+                    )
+                else:
+                    print(f"  ⚠ Unknown file format, defaulting to GIF")
+                    save_path_gif = save_path + ".gif"
+                    anim.save(save_path_gif, writer="pillow", fps=fps, dpi=100)
+                    save_path = save_path_gif
+
+                print(f"  ✓ Animation saved successfully!")
+            except Exception as e:
+                print(f"  ✗ Error saving animation: {e}")
+                print(f"    (Animation will still display if possible)")
+
+        return anim
+
+
 def main():
     """Main function to run the path animation."""
     import argparse
@@ -682,17 +1055,84 @@ def main():
         default=0,
         help="Number of waypoints behind vehicle to leave gap (0 = path connects exactly to vehicle, default: 0)",
     )
+    parser.add_argument(
+        "--no-pheromone",
+        action="store_true",
+        help="Skip pheromone animation",
+    )
+    parser.add_argument(
+        "--pheromone-speed",
+        type=float,
+        default=1.0,
+        help="Animation speed factor for pheromone animation (default: 1.0)",
+    )
+    parser.add_argument(
+        "--pheromone-interval",
+        type=int,
+        default=100,
+        help="Milliseconds between frames for pheromone animation (default: 100)",
+    )
+    parser.add_argument(
+        "--pheromone-save",
+        type=str,
+        default=None,
+        help="Path to save pheromone animation (GIF or MP4)",
+    )
 
     args = parser.parse_args()
 
     # Run pipeline
     try:
-        field, params, blocks, path_plan, solver, stats, processing_time = run_full_pipeline(seed=args.seed)
+        field, params, blocks, path_plan, solver, stats, processing_time, all_nodes, cost_matrix = run_full_pipeline(seed=args.seed)
     except Exception as e:
         print(f"\n✗ Error running pipeline: {e}")
         sys.exit(1)
 
-    # Create animator
+    # Create pheromone animation if enabled
+    pheromone_anim = None
+    pheromone_save_path = None
+    if not args.no_pheromone:
+        print("\n" + "=" * 80)
+        print("Creating Pheromone Evolution Animation")
+        print("=" * 80)
+        
+        try:
+            # Determine pheromone save path
+            pheromone_save_path = args.pheromone_save
+            if pheromone_save_path is None:
+                os.makedirs("exports/demos/animations", exist_ok=True)
+                pheromone_save_path = "exports/demos/animations/pheromone_evolution.gif"
+
+            # Create pheromone animator
+            pheromone_animator = PheromoneTrailAnimator(
+                field=field,
+                blocks=blocks,
+                nodes=all_nodes,
+                solver=solver,
+                cost_matrix=cost_matrix,
+                speed_factor=args.pheromone_speed,
+            )
+
+            # Create pheromone animation
+            pheromone_anim = pheromone_animator.create_animation(
+                interval=args.pheromone_interval,
+                save_path=pheromone_save_path,
+                fps=10,
+            )
+
+            print(f"\n✓ Pheromone animation created!")
+            print(f"  Saved to: {pheromone_save_path}")
+
+        except Exception as e:
+            print(f"\n⚠ Warning: Could not create pheromone animation: {e}")
+            print("  Continuing with path animation only...")
+            pheromone_save_path = None
+
+    # Create path animator
+    print("\n" + "=" * 80)
+    print("Creating Path Traversal Animation")
+    print("=" * 80)
+    
     animator = PathAnimator(
         field=field,
         blocks=blocks,
@@ -716,19 +1156,21 @@ def main():
     )
 
     print("\n" + "=" * 80)
-    print("Animation created successfully!")
+    print("Animations created successfully!")
     print("=" * 80)
-    print(f"\nTo view the animation:")
-    print(f"  1. It should display automatically if display is available")
-    print(f"  2. Or check the saved file: {save_path}")
+    print(f"\nTo view the animations:")
+    print(f"  1. They should display automatically if display is available")
+    if not args.no_pheromone and pheromone_save_path:
+        print(f"  2. Pheromone animation: {pheromone_save_path}")
+    print(f"  {'3' if not args.no_pheromone and pheromone_save_path else '2'}. Path animation: {save_path}")
 
     # Try to show
     try:
         plt.show()
     except Exception:
-        print("\n  (Display not available - check saved file)")
+        print("\n  (Display not available - check saved files)")
 
-    return anim
+    return anim, pheromone_anim
 
 
 if __name__ == "__main__":
