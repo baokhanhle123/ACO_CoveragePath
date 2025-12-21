@@ -195,6 +195,8 @@ def run_complete_pipeline(config: ScenarioConfig) -> Dict:
         results['solver'] = solver
         results['path_plan'] = path_plan
         results['best_solution'] = best_solution
+        results['nodes'] = all_nodes
+        results['cost_matrix'] = cost_matrix
         results['visualization_config'] = config.visualization
 
         results['success'] = True

@@ -7,6 +7,7 @@ with detailed visualizations and statistics.
 
 import streamlit as st
 
+from ..visualization.pheromone_viz import plot_pheromone_trails_at_iteration
 from ..visualization.stage_viz import (
     plot_stage1_result,
     plot_stage2_result,
@@ -294,6 +295,82 @@ def render_stage3_tab():
             st.pyplot(conv_fig)
     except Exception as e:
         st.error(f"Error generating visualization: {e}")
+
+    # Pheromone Evolution Visualization
+    st.subheader("🐜 Pheromone Evolution")
+    st.markdown("""
+    **Pheromone Trail Evolution**: Watch how ACO builds up pheromone trails over iterations.
+    Stronger trails (thicker, brighter lines) indicate paths that ants have found to be more promising.
+    """)
+
+    solver = results.get('solver')
+    has_history = solver and bool(getattr(solver, 'pheromone_history', None))
+
+    if has_history:
+        pheromone_history = solver.pheromone_history
+        history_iterations = getattr(solver, 'pheromone_history_iterations', None)
+        num_history_frames = len(pheromone_history)
+
+        # Get iteration numbers for display
+        if history_iterations:
+            max_iteration = history_iterations[-1] if history_iterations else num_history_frames - 1
+        else:
+            max_iteration = num_history_frames - 1
+
+        # Slider to select iteration
+        if history_iterations:
+            # Map slider index to actual iteration numbers
+            selected_index = st.slider(
+                "Select Iteration",
+                0,
+                num_history_frames - 1,
+                0,
+                help=f"Step through {num_history_frames} recorded iterations of ACO optimization"
+            )
+            selected_iteration = history_iterations[selected_index] if selected_index < len(history_iterations) else selected_index
+        else:
+            selected_index = st.slider(
+                "Select Iteration",
+                0,
+                num_history_frames - 1,
+                0,
+                help=f"Step through {num_history_frames} recorded iterations of ACO optimization"
+            )
+            selected_iteration = selected_index
+
+        # Display current iteration info
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.caption(f"**Frame**: {selected_index + 1} / {num_history_frames}")
+        with col_info2:
+            st.caption(f"**Iteration**: {selected_iteration} / {results['num_iterations']}")
+
+        # Generate and display pheromone trail visualization
+        try:
+            if 'nodes' in results and 'cost_matrix' in results:
+                pheromone_fig = plot_pheromone_trails_at_iteration(
+                    field=results['field'],
+                    blocks=results['blocks'],
+                    nodes=results['nodes'],
+                    solver=solver,
+                    cost_matrix=results['cost_matrix'],
+                    iteration_index=selected_index,
+                )
+                st.pyplot(pheromone_fig)
+            else:
+                st.warning("⚠️ Nodes and cost matrix not available. Please run the demo again.")
+        except Exception as e:
+            st.error(f"Error generating pheromone visualization: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    else:
+        st.info(
+            "⚠️ **Pheromone history not available.** "
+            "To see pheromone evolution, enable `record_history: true` in the scenario configuration. "
+            "The pheromone evolution visualization shows how ACO builds up trails over iterations, "
+            "helping you understand how the algorithm discovers optimal paths."
+        )
 
     # ACO parameters and results
     with st.expander("🐜 ACO Algorithm Details"):
